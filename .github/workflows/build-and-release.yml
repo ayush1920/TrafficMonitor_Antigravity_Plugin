@@ -53,7 +53,7 @@ jobs:
           "-DANTIGRAVITY_PLUGIN_VERSION=${{ steps.version.outputs.version }}"
 
       - name: Build
-        run: cmake --build build/${{ matrix.display_name }} --config Release --target AntigravityPlugin verify_plugin
+        run: cmake --build build/${{ matrix.display_name }} --config Release --target AntigravityPlugin verify_plugin test_smart_transitions
 
       - name: Run Tests
         run: ctest --test-dir build/${{ matrix.display_name }} -C Release --output-on-failure

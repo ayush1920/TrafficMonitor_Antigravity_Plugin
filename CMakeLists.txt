@@ -62,5 +62,35 @@ if(MSVC)
     target_compile_options(verify_plugin PRIVATE /utf-8)
 endif()
 
+# Smart Mode state transitions test executable
+add_executable(test_smart_transitions
+    tests/test_smart_transitions.cpp
+    src/AntigravityPlugin.cpp
+)
+
+target_include_directories(test_smart_transitions PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+)
+
+target_compile_definitions(test_smart_transitions PRIVATE
+    UNICODE
+    _UNICODE
+    NOMINMAX
+    WIN32_LEAN_AND_MEAN
+)
+
+if(MSVC)
+    target_compile_options(test_smart_transitions PRIVATE /utf-8)
+endif()
+
+target_link_libraries(test_smart_transitions PRIVATE
+    crypt32
+    advapi32
+    gdi32
+    user32
+)
+
 enable_testing()
 add_test(NAME verify_plugin COMMAND verify_plugin $<TARGET_FILE:AntigravityPlugin>)
+add_test(NAME test_smart_transitions COMMAND test_smart_transitions)

@@ -38,6 +38,19 @@ if %ERRORLEVEL% neq 0 (
 )
 
 echo.
+echo Compiling and running test_smart_transitions.exe...
+cl /nologo /EHsc /std:c++17 /I include /I src tests\test_smart_transitions.cpp src\AntigravityPlugin.cpp /Fe:test_smart_transitions.exe /link /MACHINE:X64
+if %ERRORLEVEL% neq 0 (
+    echo Error: Failed to build test_smart_transitions.exe!
+    exit /b 1
+)
+test_smart_transitions.exe
+if %ERRORLEVEL% neq 0 (
+    echo Error: Smart mode transition tests failed!
+    exit /b 1
+)
+
+echo.
 echo ======================================================================
 echo Build and verification completed successfully!
 echo ======================================================================

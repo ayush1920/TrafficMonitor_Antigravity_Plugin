@@ -207,6 +207,7 @@ void CAntigravityPlugin::LoadSettings()
     std::wstring cfg = GetConfigPath();
     m_settings.shortResetTime = (GetPrivateProfileIntW(L"Display", L"ShortResetTime", 0, cfg.c_str()) != 0);
     m_settings.hideResetTime = (GetPrivateProfileIntW(L"Display", L"HideResetTime", 0, cfg.c_str()) != 0);
+    m_settings.smartMode = (GetPrivateProfileIntW(L"Display", L"SmartMode", 0, cfg.c_str()) != 0);
 }
 
 void CAntigravityPlugin::SaveSettings()
@@ -220,6 +221,7 @@ void CAntigravityPlugin::SaveSettings()
     }
     WritePrivateProfileStringW(L"Display", L"ShortResetTime", m_settings.shortResetTime ? L"1" : L"0", cfg.c_str());
     WritePrivateProfileStringW(L"Display", L"HideResetTime", m_settings.hideResetTime ? L"1" : L"0", cfg.c_str());
+    WritePrivateProfileStringW(L"Display", L"SmartMode", m_settings.smartMode ? L"1" : L"0", cfg.c_str());
 }
 
 void CAntigravityPlugin::ApplySettings(const PluginSettings& settings)
@@ -282,8 +284,9 @@ const wchar_t* CAntigravityPlugin::GetCommandName(int command_index)
     switch (command_index)
     {
     case 0: return L"Refresh Quota Vault";
-    case 1: return L"Hide Reset Time";
-    case 2: return L"Short Reset Time (e.g. 5h)";
+    case 1: return L"Smart Mode (Active Quotas Only)";
+    case 2: return L"Hide Reset Time";
+    case 3: return L"Short Reset Time (e.g. 5h)";
     default: return nullptr;
     }
 }
@@ -292,8 +295,9 @@ int CAntigravityPlugin::IsCommandChecked(int command_index)
 {
     switch (command_index)
     {
-    case 1: return m_settings.hideResetTime ? 1 : 0;
-    case 2: return (!m_settings.hideResetTime && m_settings.shortResetTime) ? 1 : 0;
+    case 1: return m_settings.smartMode ? 1 : 0;
+    case 2: return m_settings.hideResetTime ? 1 : 0;
+    case 3: return (!m_settings.hideResetTime && m_settings.shortResetTime) ? 1 : 0;
     default: return 0;
     }
 }
@@ -311,10 +315,16 @@ void CAntigravityPlugin::OnPluginCommand(int command_index, void* hWnd, void* pa
     else if (command_index == 1)
     {
         PluginSettings s = m_settings;
-        s.hideResetTime = !s.hideResetTime;
+        s.smartMode = !s.smartMode;
         ApplySettings(s);
     }
     else if (command_index == 2)
+    {
+        PluginSettings s = m_settings;
+        s.hideResetTime = !s.hideResetTime;
+        ApplySettings(s);
+    }
+    else if (command_index == 3)
     {
         PluginSettings s = m_settings;
         if (s.hideResetTime)
@@ -335,6 +345,7 @@ struct OptionsDlgContext
     CAntigravityPlugin* pPlugin;
     bool shortResetTime;
     bool hideResetTime;
+    bool smartMode;
     bool confirmed;
     HFONT hFont;
 };
@@ -356,24 +367,32 @@ static LRESULT CALLBACK OptionsDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
                                  CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
         if (!ctx->hFont) ctx->hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
 
+        // Smart Mode Checkbox
+        HWND hChkSmart = CreateWindowExW(0, L"BUTTON", L"Smart Mode  (Only show actively decreasing quotas)",
+                                         WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX | WS_TABSTOP,
+                                         16, 12, 310, 24, hWnd, (HMENU)104, cs->hInstance, nullptr);
+        SendMessageW(hChkSmart, WM_SETFONT, (WPARAM)ctx->hFont, TRUE);
+        SendMessageW(hChkSmart, BM_SETCHECK, ctx->smartMode ? BST_CHECKED : BST_UNCHECKED, 0);
+
+        // GroupBox: Reset Time Display
         HWND hGroup = CreateWindowExW(0, L"BUTTON", L"Reset Time Display",
                                       WS_CHILD | WS_VISIBLE | BS_GROUPBOX,
-                                      16, 12, 302, 130, hWnd, (HMENU)100, cs->hInstance, nullptr);
+                                      16, 42, 312, 125, hWnd, (HMENU)100, cs->hInstance, nullptr);
         SendMessageW(hGroup, WM_SETFONT, (WPARAM)ctx->hFont, TRUE);
 
         HWND hRadio1 = CreateWindowExW(0, L"BUTTON", L"Long form  (e.g. 4h 50m, 6d 23h)",
                                        WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON | WS_GROUP | WS_TABSTOP,
-                                       32, 36, 270, 24, hWnd, (HMENU)101, cs->hInstance, nullptr);
+                                       32, 66, 280, 24, hWnd, (HMENU)101, cs->hInstance, nullptr);
         SendMessageW(hRadio1, WM_SETFONT, (WPARAM)ctx->hFont, TRUE);
 
         HWND hRadio2 = CreateWindowExW(0, L"BUTTON", L"Short form  (e.g. 5h, 7d)",
                                        WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON,
-                                       32, 66, 270, 24, hWnd, (HMENU)102, cs->hInstance, nullptr);
+                                       32, 96, 280, 24, hWnd, (HMENU)102, cs->hInstance, nullptr);
         SendMessageW(hRadio2, WM_SETFONT, (WPARAM)ctx->hFont, TRUE);
 
         HWND hRadio3 = CreateWindowExW(0, L"BUTTON", L"Hide reset time  (Percentages only)",
                                        WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON,
-                                       32, 96, 270, 24, hWnd, (HMENU)103, cs->hInstance, nullptr);
+                                       32, 126, 280, 24, hWnd, (HMENU)103, cs->hInstance, nullptr);
         SendMessageW(hRadio3, WM_SETFONT, (WPARAM)ctx->hFont, TRUE);
 
         int activeRadio = 101;
@@ -383,12 +402,12 @@ static LRESULT CALLBACK OptionsDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
 
         HWND hBtnOk = CreateWindowExW(0, L"BUTTON", L"OK",
                                       WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON | WS_TABSTOP,
-                                      125, 155, 85, 28, hWnd, (HMENU)IDOK, cs->hInstance, nullptr);
+                                      135, 180, 85, 28, hWnd, (HMENU)IDOK, cs->hInstance, nullptr);
         SendMessageW(hBtnOk, WM_SETFONT, (WPARAM)ctx->hFont, TRUE);
 
         HWND hBtnCancel = CreateWindowExW(0, L"BUTTON", L"Cancel",
                                           WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_TABSTOP,
-                                          225, 155, 85, 28, hWnd, (HMENU)IDCANCEL, cs->hInstance, nullptr);
+                                          235, 180, 85, 28, hWnd, (HMENU)IDCANCEL, cs->hInstance, nullptr);
         SendMessageW(hBtnCancel, WM_SETFONT, (WPARAM)ctx->hFont, TRUE);
 
         return 0;
@@ -401,6 +420,7 @@ static LRESULT CALLBACK OptionsDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
         {
             if (ctx)
             {
+                ctx->smartMode = (IsDlgButtonChecked(hWnd, 104) == BST_CHECKED);
                 if (IsDlgButtonChecked(hWnd, 103) == BST_CHECKED)
                 {
                     ctx->hideResetTime = true;
@@ -479,11 +499,12 @@ ITMPlugin::OptionReturn CAntigravityPlugin::ShowOptionsDialog(void* hParent)
     ctx.pPlugin = this;
     ctx.shortResetTime = m_settings.shortResetTime;
     ctx.hideResetTime = m_settings.hideResetTime;
+    ctx.smartMode = m_settings.smartMode;
     ctx.confirmed = false;
     ctx.hFont = nullptr;
 
-    int width = 345;
-    int height = 235;
+    int width = 355;
+    int height = 260;
     int x = (GetSystemMetrics(SM_CXSCREEN) - width) / 2;
     int y = (GetSystemMetrics(SM_CYSCREEN) - height) / 2;
     if (hWndParent && IsWindow(hWndParent))
@@ -533,11 +554,14 @@ ITMPlugin::OptionReturn CAntigravityPlugin::ShowOptionsDialog(void* hParent)
 
     if (ctx.confirmed)
     {
-        if (ctx.shortResetTime != m_settings.shortResetTime || ctx.hideResetTime != m_settings.hideResetTime)
+        if (ctx.shortResetTime != m_settings.shortResetTime ||
+            ctx.hideResetTime != m_settings.hideResetTime ||
+            ctx.smartMode != m_settings.smartMode)
         {
             PluginSettings newSettings = m_settings;
             newSettings.shortResetTime = ctx.shortResetTime;
             newSettings.hideResetTime = ctx.hideResetTime;
+            newSettings.smartMode = ctx.smartMode;
             ApplySettings(newSettings);
             return OR_OPTION_CHANGED;
         }
@@ -719,8 +743,21 @@ void CAntigravityPlugin::ParseAndUpdate(const std::string& jsonStr)
         int cPct = (int)std::round(c5h * 100.0);
         if (cPct < 0) cPct = 0; if (cPct > 100) cPct = 100;
 
+        int aPct = (int)std::round(aWeekly * 100.0);
+        if (aPct < 0) aPct = 0; if (aPct > 100) aPct = 100;
+
+        int gWeeklyPct = (int)std::round(gWeekly * 100.0);
+        if (gWeeklyPct < 0) gWeeklyPct = 0; if (gWeeklyPct > 100) gWeeklyPct = 100;
+
+        int cWeeklyPct = (int)std::round(cWeekly * 100.0);
+        if (cWeeklyPct < 0) cWeeklyPct = 0; if (cWeeklyPct > 100) cWeeklyPct = 100;
+
         std::wstring gReset = m_settings.hideResetTime ? L"" : FormatResetTime(g5hReset, m_settings.shortResetTime);
         std::wstring cReset = m_settings.hideResetTime ? L"" : FormatResetTime(c5hReset, m_settings.shortResetTime);
+        std::wstring aReset = m_settings.hideResetTime ? L"" : FormatResetTime(aWeeklyReset, m_settings.shortResetTime);
+
+        std::wstring gWeeklyResetFmt = m_settings.hideResetTime ? L"" : FormatResetTime(gWeeklyReset, m_settings.shortResetTime);
+        std::wstring cWeeklyResetFmt = m_settings.hideResetTime ? L"" : FormatResetTime(cWeeklyReset, m_settings.shortResetTime);
 
         std::wstring gStr = L"G:" + std::to_wstring(gPct) + L"%";
         if (!gReset.empty()) gStr += L" (" + gReset + L")";
@@ -728,20 +765,146 @@ void CAntigravityPlugin::ParseAndUpdate(const std::string& jsonStr)
         std::wstring cStr = L"C:" + std::to_wstring(cPct) + L"%";
         if (!cReset.empty()) cStr += L" (" + cReset + L")";
 
-        std::wstring line1 = gStr;
-        if (hasArgon)
+        std::wstring aStr = L"A:" + std::to_wstring(aPct) + L"%";
+        if (!aReset.empty()) aStr += L" (" + aReset + L")";
+
+        std::wstring gWeeklyStr = L"Wk:" + std::to_wstring(gWeeklyPct) + L"%";
+        if (!gWeeklyResetFmt.empty()) gWeeklyStr += L" (" + gWeeklyResetFmt + L")";
+
+        std::wstring cWeeklyStr = L"Wk:" + std::to_wstring(cWeeklyPct) + L"%";
+        if (!cWeeklyResetFmt.empty()) cWeeklyStr += L" (" + cWeeklyResetFmt + L")";
+
+        std::wstring line1;
+        std::wstring line2;
+
+        if (!m_settings.smartMode)
         {
-            int aPct = (int)std::round(aWeekly * 100.0);
-            if (aPct < 0) aPct = 0; if (aPct > 100) aPct = 100;
-            std::wstring aReset = m_settings.hideResetTime ? L"" : FormatResetTime(aWeeklyReset, m_settings.shortResetTime);
-            std::wstring aStr = L"A:" + std::to_wstring(aPct) + L"%";
-            if (!aReset.empty()) aStr += L" (" + aReset + L")";
-            line1 += L"  " + aStr;
+            // Standard / Non-smart Mode: Line 1 = Gemini (+ Argon), Line 2 = Claude
+            line1 = gStr;
+            if (hasArgon)
+            {
+                line1 += L"  " + aStr;
+            }
+            line2 = cStr;
+        }
+        else
+        {
+            // Smart Mode (Option C): Dynamic Quota Tracking
+            // Detect decreasing quota between intervals.
+            bool gDrop = false;
+            bool cDrop = false;
+            bool aDrop = false;
+
+            if (m_hasInitialSnapshot && email == m_prevAccountEmail)
+            {
+                if (m_prevQuota.g5h >= 0.0 && g5h < m_prevQuota.g5h - 0.0001) gDrop = true;
+                if (m_prevQuota.c5h >= 0.0 && c5h < m_prevQuota.c5h - 0.0001) cDrop = true;
+                if (hasArgon && m_prevQuota.aWeekly >= 0.0 && aWeekly < m_prevQuota.aWeekly - 0.0001) aDrop = true;
+            }
+
+            int dropCount = (gDrop ? 1 : 0) + (cDrop ? 1 : 0) + (aDrop ? 1 : 0);
+
+            bool showG = false;
+            bool showC = false;
+            bool showA = false;
+
+            if (dropCount == 1)
+            {
+                if (gDrop)
+                {
+                    showG = true;
+                    m_lastSingleDroppingModel = MODEL_GEMINI;
+                }
+                else if (cDrop)
+                {
+                    showC = true;
+                    m_lastSingleDroppingModel = MODEL_CLAUDE;
+                }
+                else if (aDrop)
+                {
+                    showA = true;
+                    m_lastSingleDroppingModel = MODEL_ARGON;
+                }
+                m_lastDroppingCount = 1;
+            }
+            else if (dropCount > 1)
+            {
+                showG = gDrop;
+                showC = cDrop;
+                showA = aDrop;
+                m_lastDroppingCount = dropCount;
+            }
+            else // dropCount == 0
+            {
+                if (m_lastDroppingCount == 1)
+                {
+                    // Retain the single model that was dropping previously
+                    if (m_lastSingleDroppingModel == MODEL_GEMINI) showG = true;
+                    else if (m_lastSingleDroppingModel == MODEL_CLAUDE) showC = true;
+                    else if (m_lastSingleDroppingModel == MODEL_ARGON && hasArgon) showA = true;
+                    else showG = true;
+                }
+                else
+                {
+                    // Multiple dropped previously or startup/idle -> default to Gemini
+                    showG = true;
+                    m_lastDroppingCount = 0;
+                }
+            }
+
+            int activeCount = (showG ? 1 : 0) + (showC ? 1 : 0) + (showA ? 1 : 0);
+            if (activeCount == 1)
+            {
+                if (showG)
+                {
+                    line1 = gStr;
+                    line2 = gWeeklyStr;
+                }
+                else if (showC)
+                {
+                    line1 = cStr;
+                    line2 = cWeeklyStr;
+                }
+                else // showA
+                {
+                    line1 = aStr;
+                    line2 = L"Argon Weekly";
+                }
+            }
+            else if (activeCount == 2)
+            {
+                if (showG && showC)
+                {
+                    line1 = gStr;
+                    line2 = cStr;
+                }
+                else if (showG && showA)
+                {
+                    line1 = gStr;
+                    line2 = aStr;
+                }
+                else // showC && showA
+                {
+                    line1 = cStr;
+                    line2 = aStr;
+                }
+            }
+            else // activeCount == 3 (all three models dropping)
+            {
+                line1 = gStr + L"  " + aStr;
+                line2 = cStr;
+            }
         }
 
-        std::wstring line2 = cStr;
+        // Update snapshot for subsequent drop detection
+        m_prevQuota.g5h = g5h;
+        m_prevQuota.c5h = c5h;
+        m_prevQuota.aWeekly = hasArgon ? aWeekly : -1.0;
+        m_prevQuota.valid = true;
+        m_prevAccountEmail = email;
+        m_hasInitialSnapshot = true;
 
-        // Item 0: Combined (Line 1 = Gemini + Argon, Line 2 = Claude)
+        // Item 0: Combined
         m_itemCombined.UpdateLabel(line1.c_str());
         m_itemCombined.UpdateValue(line2.c_str());
 
@@ -763,14 +926,8 @@ void CAntigravityPlugin::ParseAndUpdate(const std::string& jsonStr)
         m_itemAccount.UpdateValue(wLabel.c_str());
 
         // Tooltip summary formatting: ensure reset times are present for all tiers
-        int gWeeklyPct = (int)std::round(gWeekly * 100.0);
-        if (gWeeklyPct < 0) gWeeklyPct = 0; if (gWeeklyPct > 100) gWeeklyPct = 100;
-
         int c5hPct = (int)std::round(c5h * 100.0);
         if (c5hPct < 0) c5hPct = 0; if (c5hPct > 100) c5hPct = 100;
-
-        int cWeeklyPct = (int)std::round(cWeekly * 100.0);
-        if (cWeeklyPct < 0) cWeeklyPct = 0; if (cWeeklyPct > 100) cWeeklyPct = 100;
 
         std::wstring wG5hReset = Utf8ToWide(g5hReset);
         std::wstring wGWeeklyReset = Utf8ToWide(gWeeklyReset);

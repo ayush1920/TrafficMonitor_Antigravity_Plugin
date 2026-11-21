@@ -57,27 +57,34 @@ int main(int argc, char* argv[])
                    << L" [Checked: " << plugin->IsCommandChecked(i) << L"]" << std::endl;
     }
 
-    // Toggle Command 2 (Short Reset Time)
-    std::cout << "\nToggling Command 2 (Short Reset Time)..." << std::endl;
-    plugin->OnPluginCommand(2, nullptr, nullptr);
-    std::wcout << L"After toggle Short - Command 2 Checked: " << plugin->IsCommandChecked(2) << std::endl;
+    // Toggle Command 1 (Smart Mode)
+    std::cout << "\nToggling Command 1 (Smart Mode)..." << std::endl;
+    plugin->OnPluginCommand(1, nullptr, nullptr);
+    std::wcout << L"After toggle Smart Mode - Command 1 Checked: " << plugin->IsCommandChecked(1) << std::endl;
+    std::wcout << L"After toggle Smart Mode - Line 1: " << item0->GetItemLableText() << std::endl;
+    std::wcout << L"After toggle Smart Mode - Line 2: " << item0->GetItemValueText() << std::endl;
+
+    // Toggle Command 3 (Short Reset Time)
+    std::cout << "\nToggling Command 3 (Short Reset Time)..." << std::endl;
+    plugin->OnPluginCommand(3, nullptr, nullptr);
+    std::wcout << L"After toggle Short - Command 3 Checked: " << plugin->IsCommandChecked(3) << std::endl;
     std::wcout << L"After toggle Short - Line 1: " << item0->GetItemLableText() << std::endl;
     std::wcout << L"After toggle Short - Line 2: " << item0->GetItemValueText() << std::endl;
 
-    // Toggle Command 1 (Hide Reset Time)
-    std::cout << "\nToggling Command 1 (Hide Reset Time)..." << std::endl;
-    plugin->OnPluginCommand(1, nullptr, nullptr);
-    std::wcout << L"After toggle Hide - Command 1 Checked: " << plugin->IsCommandChecked(1) << std::endl;
+    // Toggle Command 2 (Hide Reset Time)
+    std::cout << "\nToggling Command 2 (Hide Reset Time)..." << std::endl;
+    plugin->OnPluginCommand(2, nullptr, nullptr);
+    std::wcout << L"After toggle Hide - Command 2 Checked: " << plugin->IsCommandChecked(2) << std::endl;
     std::wcout << L"After toggle Hide - Line 1: " << item0->GetItemLableText() << std::endl;
     std::wcout << L"After toggle Hide - Line 2: " << item0->GetItemValueText() << std::endl;
 
-    // Toggle back to unhidden
-    std::cout << "\nToggling Hide back..." << std::endl;
-    plugin->OnPluginCommand(1, nullptr, nullptr);
-    // Toggle Short back to Long
-    plugin->OnPluginCommand(2, nullptr, nullptr);
-    std::wcout << L"Long form restored - Line 1: " << item0->GetItemLableText() << std::endl;
-    std::wcout << L"Long form restored - Line 2: " << item0->GetItemValueText() << std::endl;
+    // Restore to defaults (Smart Mode: OFF, Hide: OFF, Short: OFF)
+    std::cout << "\nRestoring default settings..." << std::endl;
+    if (plugin->IsCommandChecked(1)) plugin->OnPluginCommand(1, nullptr, nullptr);
+    if (plugin->IsCommandChecked(2)) plugin->OnPluginCommand(2, nullptr, nullptr);
+    if (plugin->IsCommandChecked(3)) plugin->OnPluginCommand(3, nullptr, nullptr);
+    std::wcout << L"Defaults restored - Line 1: " << item0->GetItemLableText() << std::endl;
+    std::wcout << L"Defaults restored - Line 2: " << item0->GetItemValueText() << std::endl;
 
     std::wcout << L"\nTooltip (retains full details):\n" << plugin->GetTooltipInfo() << std::endl;
 

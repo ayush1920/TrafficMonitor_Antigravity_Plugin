@@ -71,10 +71,26 @@ private:
     std::atomic<int> m_activeLabelBuf;
 };
 
+enum ActiveModelType
+{
+    MODEL_GEMINI = 0,
+    MODEL_CLAUDE = 1,
+    MODEL_ARGON = 2
+};
+
+struct QuotaSnapshot
+{
+    double g5h{-1.0};
+    double c5h{-1.0};
+    double aWeekly{-1.0};
+    bool valid{false};
+};
+
 struct PluginSettings
 {
     bool shortResetTime = false; // false = Long form (4h59m), true = Short form (5h)
     bool hideResetTime = false;  // true = Hide reset time completely from taskbar interface
+    bool smartMode = false;      // true = Option C: Only display models whose quota is decreasing
 };
 
 class CAntigravityPlugin : public ITMPlugin
@@ -90,7 +106,7 @@ public:
     virtual OptionReturn ShowOptionsDialog(void* hParent) override;
     virtual const wchar_t* GetInfo(PluginInfoIndex index) override;
     virtual const wchar_t* GetTooltipInfo() override;
-    virtual int GetCommandCount() override { return 3; }
+    virtual int GetCommandCount() override { return 4; }
     virtual const wchar_t* GetCommandName(int command_index) override;
     virtual int IsCommandChecked(int command_index) override;
     virtual void OnPluginCommand(int command_index, void* hWnd, void* para) override;
@@ -98,6 +114,7 @@ public:
 
     const PluginSettings& GetSettings() const { return m_settings; }
     void ApplySettings(const PluginSettings& settings);
+    void ParseAndUpdate(const std::string& jsonStr);
 
 private:
     std::wstring GetConfigPath() const;
@@ -105,10 +122,16 @@ private:
     void SaveSettings();
     std::wstring ResolveVaultPath() const;
     bool ReadAndDecryptVault(std::string& outJsonStr);
-    void ParseAndUpdate(const std::string& jsonStr);
     void UpdateTooltip(const wchar_t* newTooltip);
 
     PluginSettings m_settings;
+
+    // Smart Mode State
+    QuotaSnapshot m_prevQuota;
+    ActiveModelType m_lastSingleDroppingModel{MODEL_GEMINI};
+    int m_lastDroppingCount{0};
+    bool m_hasInitialSnapshot{false};
+    std::string m_prevAccountEmail;
 
     CPluginItem m_itemCombined; // Item 0: antigravity_quota
     CPluginItem m_itemGemini;   // Item 1: antigravity_gemini
