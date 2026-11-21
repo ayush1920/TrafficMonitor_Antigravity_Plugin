@@ -11,6 +11,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Shared plugin library
 add_library(AntigravityPlugin SHARED
     src/AntigravityPlugin.cpp
+    src/QuotaSync.cpp
     src/AntigravityPlugin.def
 )
 
@@ -36,6 +37,10 @@ target_link_libraries(AntigravityPlugin PRIVATE
     gdi32
     gdiplus
     user32
+    winhttp
+    ws2_32
+    bcrypt
+    shell32
 )
 
 set_target_properties(AntigravityPlugin PROPERTIES
@@ -72,6 +77,7 @@ target_link_libraries(verify_plugin PRIVATE
 add_executable(test_smart_transitions
     tests/test_smart_transitions.cpp
     src/AntigravityPlugin.cpp
+    src/QuotaSync.cpp
 )
 
 target_include_directories(test_smart_transitions PRIVATE
@@ -96,6 +102,10 @@ target_link_libraries(test_smart_transitions PRIVATE
     gdi32
     gdiplus
     user32
+    winhttp
+    ws2_32
+    bcrypt
+    shell32
 )
 
 enable_testing()

@@ -132,7 +132,7 @@ class CAntigravityPlugin : public ITMPlugin
 {
 public:
     CAntigravityPlugin();
-    virtual ~CAntigravityPlugin() = default;
+    virtual ~CAntigravityPlugin();
 
     // ITMPlugin interfaces
     virtual int GetAPIVersion() const override { return 8; }
@@ -141,7 +141,7 @@ public:
     virtual OptionReturn ShowOptionsDialog(void* hParent) override;
     virtual const wchar_t* GetInfo(PluginInfoIndex index) override;
     virtual const wchar_t* GetTooltipInfo() override;
-    virtual int GetCommandCount() override { return 5; }
+    virtual int GetCommandCount() override { return 6; }
     virtual const wchar_t* GetCommandName(int command_index) override;
     virtual int IsCommandChecked(int command_index) override;
     virtual void OnPluginCommand(int command_index, void* hWnd, void* para) override;
@@ -159,7 +159,21 @@ private:
     void SaveSettings();
     std::wstring ResolveVaultPath() const;
     bool ReadAndDecryptVault(std::string& outJsonStr);
+    void UpdateVaultFileCacheMeta(const std::wstring& path);
     void UpdateTooltip(const wchar_t* newTooltip);
+    void RefreshHostWindows();
+    void EnsureBackgroundWorkerStarted();
+    void StopBackgroundWorker();
+    void RequestPollNow(bool interactiveLogin = false);
+    static DWORD WINAPI WorkerThreadProc(LPVOID lpParam);
+    void BackgroundWorkerLoop();
+
+    HANDLE m_workerThread{nullptr};
+    HANDLE m_wakeEvent{nullptr};
+    std::atomic<bool> m_stopWorker{false};
+    std::atomic<bool> m_pollNowRequested{false};
+    std::atomic<bool> m_loginRequested{false};
+    std::mutex m_dataMutex;
 
     PluginSettings m_settings;
 

@@ -6,7 +6,7 @@ An ultra-lightweight, native C++ (x86 & x64) plugin for **TrafficMonitor** on Wi
 
 ## Key Features
 
-- **Live Quota Monitoring**: Automatically decrypts and reads quota information from the secure local DPAPI vault managed by Gemini Profile / AGVerse.
+- **Standalone & Shared Quota Polling**: Works completely independently (no Rainmeter or AgVerse installation required) with built-in background polling every 5 minutes, automatic OAuth token refresh, IDE credential discovery (`~/.gemini/jetski-standalone-oauth-token` / Windows Credential Manager), and a **Sign In with Google...** context menu command. When AgVerse or Rainmeter is also installed, it shares `%LOCALAPPDATA%\AntigravityQuota\vault.dat` seamlessly to avoid duplicate logins.
 - **Multi-Model Support**: Tracks 5-hour and weekly quotas for:
   - **Gemini** (5h & Weekly limits)
   - **Claude / Opus** (5h & Weekly limits)

@@ -15,7 +15,7 @@ cd /d "%~dp0"
 
 echo.
 echo Compiling AntigravityPlugin.dll...
-cl /nologo /LD /EHsc /O2 /std:c++17 /utf-8 /DUNICODE /D_UNICODE /DNOMINMAX /DWIN32_LEAN_AND_MEAN /I include /I src src\AntigravityPlugin.cpp /DEF:src\AntigravityPlugin.def /Fe:AntigravityPlugin.dll /link /MACHINE:X64
+cl /nologo /LD /EHsc /O2 /std:c++17 /utf-8 /DUNICODE /D_UNICODE /DNOMINMAX /DWIN32_LEAN_AND_MEAN /I include /I src src\AntigravityPlugin.cpp src\QuotaSync.cpp /DEF:src\AntigravityPlugin.def /Fe:AntigravityPlugin.dll /link /MACHINE:X64
 if %ERRORLEVEL% neq 0 (
     echo Error: Failed to build AntigravityPlugin.dll!
     exit /b 1
@@ -39,7 +39,7 @@ if %ERRORLEVEL% neq 0 (
 
 echo.
 echo Compiling and running test_smart_transitions.exe...
-cl /nologo /EHsc /std:c++17 /utf-8 /DUNICODE /D_UNICODE /DNOMINMAX /DWIN32_LEAN_AND_MEAN /I include /I src tests\test_smart_transitions.cpp src\AntigravityPlugin.cpp /Fe:test_smart_transitions.exe /link /MACHINE:X64
+cl /nologo /EHsc /std:c++17 /utf-8 /DUNICODE /D_UNICODE /DNOMINMAX /DWIN32_LEAN_AND_MEAN /I include /I src tests\test_smart_transitions.cpp src\AntigravityPlugin.cpp src\QuotaSync.cpp /Fe:test_smart_transitions.exe /link /MACHINE:X64
 if %ERRORLEVEL% neq 0 (
     echo Error: Failed to build test_smart_transitions.exe!
     exit /b 1

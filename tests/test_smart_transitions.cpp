@@ -3,6 +3,7 @@
 #include <string>
 #include <windows.h>
 #include "AntigravityPlugin.h"
+#include "QuotaSync.h"
 
 std::string MakeJson(double g5h, double c5h, double aWeekly, const std::string& email = "test@example.com")
 {
@@ -205,6 +206,41 @@ int main()
 
     plugin.ApplySettings(originalSettings);
 
-    std::cout << "\nALL 15 STYLE, POLISH, TRANSITION AND PERCENT TESTS PASSED PERFECTLY!" << std::endl;
+    // 16. Test QuotaSync Cloud Code JSON parsing & reset timer formatting
+    long long tNow = QuotaSync::ParseIsoUtcEpoch("2026-11-22T00:00:00Z");
+    long long t5h = QuotaSync::ParseIsoUtcEpoch("2026-11-22T04:59:10Z");
+    long long t7d = QuotaSync::ParseIsoUtcEpoch("2026-11-28T23:05:00Z");
+    assert(tNow > 0 && t5h > tNow && t7d > t5h);
+    assert(QuotaSync::FormatResetDuration(t5h, tNow) == "4h 59m");
+    assert(QuotaSync::FormatResetDuration(t7d, tNow) == "6d 23h");
+    assert(QuotaSync::FormatResetDuration(tNow - 10, tNow) == "Ready");
+
+    std::string mockSummary =
+        "{\"response\":{\"groups\":["
+        "{\"displayName\":\"Gemini\",\"buckets\":["
+        "{\"window\":\"5h\",\"remainingFraction\":0.76,\"resetTime\":\"2026-11-22T04:59:10Z\"},"
+        "{\"window\":\"weekly\",\"remainingFraction\":0.93,\"resetTime\":\"2026-11-28T23:05:00Z\"}"
+        "]},"
+        "{\"displayName\":\"Claude & GPT\",\"buckets\":["
+        "{\"window\":\"5h\",\"remainingFraction\":1.0,\"resetTime\":\"2026-11-22T04:59:10Z\"},"
+        "{\"window\":\"7d\",\"remainingFraction\":0.50,\"resetTime\":\"2026-11-28T23:05:00Z\"}"
+        "]},"
+        "{\"displayName\":\"Gemini 4 Argon\",\"buckets\":["
+        "{\"window\":\"weekly\",\"remainingFraction\":0.94,\"resetTime\":\"2026-11-28T23:05:00Z\"}"
+        "]}]}}";
+
+    double g5 = 0, gw = 0, c5 = 0, cw = 0, aw = 0;
+    std::string g5r, gwr, c5r, cwr, awr;
+    bool hasA = false;
+    bool ok = QuotaSync::ApplyQuotaSummaryJson(mockSummary, g5, g5r, gw, gwr, c5, c5r, cw, cwr, hasA, aw, awr, tNow);
+    assert(ok);
+    assert(hasA);
+    assert(g5 > 0.75 && g5 < 0.77 && g5r == "4h 59m");
+    assert(gw > 0.92 && gw < 0.94 && gwr == "6d 23h");
+    assert(c5 > 0.99 && cw > 0.49 && cw < 0.51);
+    assert(aw > 0.93 && aw < 0.95 && awr == "6d 23h");
+    std::cout << "QuotaSync parsing & formatting tests passed!" << std::endl;
+
+    std::cout << "\nALL 16 STYLE, POLISH, TRANSITION, PERCENT AND QUOTASYNC TESTS PASSED PERFECTLY!" << std::endl;
     return 0;
 }

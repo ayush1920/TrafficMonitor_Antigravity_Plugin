@@ -1,4 +1,5 @@
 ﻿#include "AntigravityPlugin.h"
+#include "QuotaSync.h"
 #include "json.hpp"
 #include <fstream>
 #include <objidl.h>
@@ -831,16 +832,34 @@ CAntigravityPlugin::CAntigravityPlugin()
     DataRequired();
 }
 
+CAntigravityPlugin::~CAntigravityPlugin()
+{
+    StopBackgroundWorker();
+}
+
 void CAntigravityPlugin::OnInitialize(ITrafficMonitor* pApp)
 {
     m_pApp = pApp;
     LoadSettings();
     DataRequired();
+    EnsureBackgroundWorkerStarted();
 }
 
 void CAntigravityPlugin::OnExtenedInfo(ExtendedInfoIndex index, const wchar_t* data)
 {
     if (!data) return;
+
+    auto applyPercentChange = [&]() {
+        std::lock_guard<std::mutex> lock(m_dataMutex);
+        if (!m_lastJsonStr.empty())
+        {
+            ParseAndUpdate(m_lastJsonStr, false);
+        }
+        else
+        {
+            m_itemCombined.UpdateLabel(m_hidePercent ? L"G:100 A:100" : L"G:100% A:100%");
+        }
+    };
 
     if (index == EI_TASKBAR_WND_NOT_SHOW_PERCENT)
     {
@@ -850,10 +869,7 @@ void CAntigravityPlugin::OnExtenedInfo(ExtendedInfoIndex index, const wchar_t* d
         if (m_hidePercent != hide)
         {
             m_hidePercent = hide;
-            if (!m_lastJsonStr.empty())
-            {
-                ParseAndUpdate(m_lastJsonStr, false);
-            }
+            applyPercentChange();
         }
     }
     else if (index == EI_MAIN_WND_NOT_SHOW_PERCENT)
@@ -863,10 +879,7 @@ void CAntigravityPlugin::OnExtenedInfo(ExtendedInfoIndex index, const wchar_t* d
         if (!m_taskbarSettingReceived && m_hidePercent != hide)
         {
             m_hidePercent = hide;
-            if (!m_lastJsonStr.empty())
-            {
-                ParseAndUpdate(m_lastJsonStr, false);
-            }
+            applyPercentChange();
         }
     }
     else if (index == EI_DRAW_TASKBAR_WND)
@@ -876,10 +889,7 @@ void CAntigravityPlugin::OnExtenedInfo(ExtendedInfoIndex index, const wchar_t* d
         if (m_hidePercent != targetHide)
         {
             m_hidePercent = targetHide;
-            if (!m_lastJsonStr.empty())
-            {
-                ParseAndUpdate(m_lastJsonStr, false);
-            }
+            applyPercentChange();
         }
     }
 }
@@ -938,22 +948,8 @@ void CAntigravityPlugin::SaveSettings()
     WritePrivateProfileStringW(L"Display", L"DimSecondaryInfo", m_settings.dimSecondaryInfo ? L"1" : L"0", cfg.c_str());
 }
 
-void CAntigravityPlugin::ApplySettings(const PluginSettings& settings)
+void CAntigravityPlugin::RefreshHostWindows()
 {
-    m_settings = settings;
-    SaveSettings();
-    if (!m_lastJsonStr.empty())
-    {
-        ParseAndUpdate(m_lastJsonStr, false);
-    }
-    else
-    {
-        m_lastWriteTime.dwLowDateTime = 0;
-        m_lastWriteTime.dwHighDateTime = 0;
-        m_lastFileSize = 0;
-        DataRequired();
-    }
-
     if (m_pApp && m_pApp->GetAPIVersion() >= 1)
     {
         HWND hTaskbar = static_cast<HWND>(m_pApp->GetTaskbarWindowHwnd());
@@ -967,6 +963,31 @@ void CAntigravityPlugin::ApplySettings(const PluginSettings& settings)
             InvalidateRect(hMain, nullptr, FALSE);
         }
     }
+}
+
+void CAntigravityPlugin::ApplySettings(const PluginSettings& settings)
+{
+    m_settings = settings;
+    SaveSettings();
+    {
+        std::lock_guard<std::mutex> lock(m_dataMutex);
+        if (!m_lastJsonStr.empty())
+        {
+            ParseAndUpdate(m_lastJsonStr, false);
+        }
+        else
+        {
+            m_lastWriteTime.dwLowDateTime = 0;
+            m_lastWriteTime.dwHighDateTime = 0;
+            m_lastFileSize = 0;
+        }
+    }
+    if (m_lastJsonStr.empty())
+    {
+        DataRequired();
+    }
+
+    RefreshHostWindows();
 }
 
 IPluginItem* CAntigravityPlugin::GetItem(int index)
@@ -1018,11 +1039,12 @@ const wchar_t* CAntigravityPlugin::GetCommandName(int command_index)
 {
     switch (command_index)
     {
-    case 0: return L"Refresh Quota Vault";
+    case 0: return L"Refresh Quota Now";
     case 1: return L"Smart Mode (Active Quotas Only)";
     case 2: return L"Hide Weekly Quota (Wk)";
     case 3: return L"Hide Reset Time";
     case 4: return L"Short Reset Time (e.g. 5h)";
+    case 5: return L"Sign In with Google...";
     default: return nullptr;
     }
 }
@@ -1043,11 +1065,15 @@ void CAntigravityPlugin::OnPluginCommand(int command_index, void* hWnd, void* pa
 {
     if (command_index == 0)
     {
-        // Force reload by invalidating cached write time
-        m_lastWriteTime.dwLowDateTime = 0;
-        m_lastWriteTime.dwHighDateTime = 0;
-        m_lastFileSize = 0;
+        {
+            std::lock_guard<std::mutex> lock(m_dataMutex);
+            m_lastWriteTime.dwLowDateTime = 0;
+            m_lastWriteTime.dwHighDateTime = 0;
+            m_lastFileSize = 0;
+        }
         DataRequired();
+        EnsureBackgroundWorkerStarted();
+        RequestPollNow(false);
     }
     else if (command_index == 1)
     {
@@ -1080,6 +1106,11 @@ void CAntigravityPlugin::OnPluginCommand(int command_index, void* hWnd, void* pa
             s.shortResetTime = !s.shortResetTime;
         }
         ApplySettings(s);
+    }
+    else if (command_index == 5)
+    {
+        EnsureBackgroundWorkerStarted();
+        RequestPollNow(true);
     }
 }
 
@@ -1440,29 +1471,17 @@ ITMPlugin::OptionReturn CAntigravityPlugin::ShowOptionsDialog(void* hParent)
 
 std::wstring CAntigravityPlugin::ResolveVaultPath() const
 {
-    // 1. Explicit primary path check
-    const wchar_t* explicitPath = L"C:\\Users\\Ayush\\AppData\\Local\\AntigravityQuota\\vault.dat";
-    DWORD attr = GetFileAttributesW(explicitPath);
-    if (attr != INVALID_FILE_ATTRIBUTES && !(attr & FILE_ATTRIBUTE_DIRECTORY))
-    {
-        return explicitPath;
-    }
+    return QuotaSync::ResolveVaultPath();
+}
 
-    // 2. Dynamic fallback to %LOCALAPPDATA%
-    wchar_t localAppData[MAX_PATH];
-    DWORD len = GetEnvironmentVariableW(L"LOCALAPPDATA", localAppData, MAX_PATH);
-    if (len > 0 && len < MAX_PATH)
+void CAntigravityPlugin::UpdateVaultFileCacheMeta(const std::wstring& path)
+{
+    WIN32_FILE_ATTRIBUTE_DATA fileAttr;
+    if (GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &fileAttr))
     {
-        std::wstring fallbackPath = std::wstring(localAppData) + L"\\AntigravityQuota\\vault.dat";
-        attr = GetFileAttributesW(fallbackPath.c_str());
-        if (attr != INVALID_FILE_ATTRIBUTES && !(attr & FILE_ATTRIBUTE_DIRECTORY))
-        {
-            return fallbackPath;
-        }
-        return fallbackPath;
+        m_lastWriteTime = fileAttr.ftLastWriteTime;
+        m_lastFileSize = fileAttr.nFileSizeLow;
     }
-
-    return explicitPath;
 }
 
 bool CAntigravityPlugin::ReadAndDecryptVault(std::string& outJsonStr)
@@ -1470,7 +1489,7 @@ bool CAntigravityPlugin::ReadAndDecryptVault(std::string& outJsonStr)
     std::wstring path = ResolveVaultPath();
 
     WIN32_FILE_ATTRIBUTE_DATA fileAttr;
-    if (!GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &fileAttr))
+    if (path.empty() || !GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &fileAttr))
     {
         if (!m_hasLoadedData)
         {
@@ -1478,7 +1497,7 @@ bool CAntigravityPlugin::ReadAndDecryptVault(std::string& outJsonStr)
             m_itemGemini.UpdateValue(L"N/A");
             m_itemClaude.UpdateValue(L"N/A");
             m_itemAccount.UpdateValue(L"N/A");
-            UpdateTooltip(L"Antigravity Quota\r\nVault not found.");
+            UpdateTooltip(L"Antigravity Quota\r\nNo account linked.\r\nRight-click -> Sign In with Google...");
         }
         return false;
     }
@@ -1492,51 +1511,10 @@ bool CAntigravityPlugin::ReadAndDecryptVault(std::string& outJsonStr)
         return false; // No change needed
     }
 
-    // Open file with full sharing permissions to avoid locking conflicts
-    HANDLE hFile = CreateFileW(path.c_str(), GENERIC_READ,
-                               FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                               nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (hFile == INVALID_HANDLE_VALUE)
+    if (!QuotaSync::ReadVaultJson(outJsonStr))
     {
-        // Could be momentarily locked by writer; keep existing data
         return false;
     }
-
-    DWORD fileSize = GetFileSize(hFile, nullptr);
-    if (fileSize == 0 || fileSize == INVALID_FILE_SIZE)
-    {
-        CloseHandle(hFile);
-        return false;
-    }
-
-    std::vector<BYTE> buffer(fileSize);
-    DWORD bytesRead = 0;
-    if (!ReadFile(hFile, buffer.data(), fileSize, &bytesRead, nullptr) || bytesRead != fileSize)
-    {
-        CloseHandle(hFile);
-        return false;
-    }
-    CloseHandle(hFile);
-
-    // Decrypt DPAPI
-    DATA_BLOB dataIn;
-    dataIn.pbData = buffer.data();
-    dataIn.cbData = fileSize;
-
-    DATA_BLOB dataOut;
-    ZeroMemory(&dataOut, sizeof(dataOut));
-
-    if (!CryptUnprotectData(&dataIn, nullptr, nullptr, nullptr, nullptr, CRYPTPROTECT_UI_FORBIDDEN, &dataOut))
-    {
-        // Decrypt failed (temporary corruption or key issue); preserve existing data
-        return false;
-    }
-
-    if (dataOut.pbData && dataOut.cbData > 0)
-    {
-        outJsonStr.assign(reinterpret_cast<const char*>(dataOut.pbData), dataOut.cbData);
-    }
-    LocalFree(dataOut.pbData);
 
     // Update tracked file attributes upon successful read & decrypt
     m_lastWriteTime = fileAttr.ftLastWriteTime;
@@ -1862,6 +1840,11 @@ void CAntigravityPlugin::ParseAndUpdate(const std::string& jsonStr, bool updateS
             }
         }
 
+        if (SafeGetBool(*activeAccount, "AuthFailed", false))
+        {
+            tooltip += L"\r\n[!] Token expired - right-click -> Sign In with Google...";
+        }
+
         UpdateTooltip(tooltip.c_str());
         m_hasLoadedData = true;
     }
@@ -1874,9 +1857,127 @@ void CAntigravityPlugin::ParseAndUpdate(const std::string& jsonStr, bool updateS
 void CAntigravityPlugin::DataRequired()
 {
     std::string jsonStr;
-    if (ReadAndDecryptVault(jsonStr))
+    bool updated = false;
     {
-        ParseAndUpdate(jsonStr);
+        std::lock_guard<std::mutex> lock(m_dataMutex);
+        if (ReadAndDecryptVault(jsonStr))
+        {
+            ParseAndUpdate(jsonStr);
+            updated = true;
+        }
+    }
+    if (updated)
+    {
+        RefreshHostWindows();
+    }
+}
+
+void CAntigravityPlugin::EnsureBackgroundWorkerStarted()
+{
+    if (m_workerThread != nullptr) return;
+    m_stopWorker.store(false, std::memory_order_release);
+    if (!m_wakeEvent)
+    {
+        m_wakeEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    }
+    m_workerThread = CreateThread(nullptr, 0, WorkerThreadProc, this, 0, nullptr);
+}
+
+void CAntigravityPlugin::StopBackgroundWorker()
+{
+    m_stopWorker.store(true, std::memory_order_release);
+    if (m_wakeEvent)
+    {
+        SetEvent(m_wakeEvent);
+    }
+    if (m_workerThread)
+    {
+        WaitForSingleObject(m_workerThread, 1500);
+        CloseHandle(m_workerThread);
+        m_workerThread = nullptr;
+    }
+    if (m_wakeEvent)
+    {
+        CloseHandle(m_wakeEvent);
+        m_wakeEvent = nullptr;
+    }
+}
+
+void CAntigravityPlugin::RequestPollNow(bool interactiveLogin)
+{
+    if (interactiveLogin)
+    {
+        m_loginRequested.store(true, std::memory_order_release);
+    }
+    else
+    {
+        m_pollNowRequested.store(true, std::memory_order_release);
+    }
+    if (m_wakeEvent)
+    {
+        SetEvent(m_wakeEvent);
+    }
+}
+
+DWORD WINAPI CAntigravityPlugin::WorkerThreadProc(LPVOID lpParam)
+{
+    CAntigravityPlugin* self = static_cast<CAntigravityPlugin*>(lpParam);
+    if (self)
+    {
+        self->BackgroundWorkerLoop();
+    }
+    return 0;
+}
+
+void CAntigravityPlugin::BackgroundWorkerLoop()
+{
+    const DWORD kPollIntervalMs = 5 * 60 * 1000; // 5 minutes
+
+    // Initial poll right after initialization
+    m_pollNowRequested.store(true, std::memory_order_release);
+
+    while (!m_stopWorker.load(std::memory_order_acquire))
+    {
+        bool doLogin = m_loginRequested.exchange(false, std::memory_order_acq_rel);
+        bool doPoll = m_pollNowRequested.exchange(false, std::memory_order_acq_rel);
+
+        if (doLogin)
+        {
+            std::string updatedJson;
+            std::string errMsg;
+            if (QuotaSync::SignInWithBrowser(updatedJson, errMsg, &m_stopWorker))
+            {
+                std::lock_guard<std::mutex> lock(m_dataMutex);
+                UpdateVaultFileCacheMeta(ResolveVaultPath());
+                ParseAndUpdate(updatedJson, true);
+                RefreshHostWindows();
+            }
+            else if (!m_stopWorker.load(std::memory_order_acquire) && !errMsg.empty())
+            {
+                std::wstring msg = L"Antigravity Quota\r\n" + Utf8ToWide(errMsg);
+                UpdateTooltip(msg.c_str());
+            }
+        }
+        else if (doPoll)
+        {
+            std::string updatedJson;
+            if (QuotaSync::PollActiveAccountAndUpdateVault(updatedJson, &m_stopWorker))
+            {
+                std::lock_guard<std::mutex> lock(m_dataMutex);
+                UpdateVaultFileCacheMeta(ResolveVaultPath());
+                ParseAndUpdate(updatedJson, true);
+                RefreshHostWindows();
+            }
+        }
+
+        if (m_stopWorker.load(std::memory_order_acquire)) break;
+
+        DWORD waitRes = WaitForSingleObject(m_wakeEvent, kPollIntervalMs);
+        if (m_stopWorker.load(std::memory_order_acquire)) break;
+        if (waitRes == WAIT_TIMEOUT)
+        {
+            m_pollNowRequested.store(true, std::memory_order_release);
+        }
     }
 }
 
