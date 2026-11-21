@@ -97,6 +97,11 @@ public:
         m_renderSettings = settings;
     }
 
+    void SetHostLabelColor(COLORREF clr) { m_hostLabelColor.store(clr, std::memory_order_relaxed); }
+    void SetHostValueColor(COLORREF clr) { m_hostValueColor.store(clr, std::memory_order_relaxed); }
+    COLORREF GetHostLabelColor() const { return m_hostLabelColor.load(std::memory_order_relaxed); }
+    COLORREF GetHostValueColor() const { return m_hostValueColor.load(std::memory_order_relaxed); }
+
 private:
     std::wstring m_id;
     std::wstring m_name;
@@ -107,6 +112,8 @@ private:
     wchar_t m_labelBuffers[2][256];
     std::atomic<int> m_activeBuf;
     std::atomic<int> m_activeLabelBuf;
+    std::atomic<COLORREF> m_hostLabelColor{ CLR_INVALID };
+    std::atomic<COLORREF> m_hostValueColor{ CLR_INVALID };
 
     mutable std::mutex m_renderMutex;
     std::vector<QuotaDisplayEntry> m_renderEntries;

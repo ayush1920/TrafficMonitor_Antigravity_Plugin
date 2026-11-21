@@ -158,23 +158,27 @@ static COLORREF GetThresholdColor(int pct, bool darkMode)
 static COLORREF ComputeSecondaryColor(COLORREF baseColor, bool darkMode, bool insidePill, bool dimEnabled)
 {
     if (!dimEnabled) return baseColor;
-    if (darkMode)
-    {
-        // Inside a dark slate pill RGB(34,38,46), 60% white ~ RGB(166,170,178).
-        // Directly over translucent taskbar (often medium gray/taupe), use RGB(194,200,210) so it dims without vanishing.
-        return insidePill ? RGB(166, 172, 184) : RGB(194, 200, 210);
-    }
-    return insidePill ? RGB(96, 104, 118) : RGB(88, 94, 106);
-}
 
-static COLORREF ComputeLabelColor(COLORREF baseColor, bool darkMode, bool insidePill, bool dimEnabled)
-{
-    if (!dimEnabled) return baseColor;
+    BYTE r = GetRValue(baseColor);
+    BYTE g = GetGValue(baseColor);
+    BYTE b = GetBValue(baseColor);
+
     if (darkMode)
     {
-        return insidePill ? RGB(192, 198, 210) : RGB(212, 218, 228);
+        // Smoothly dim the host color by ~30% in dark mode, preserving the host's configured tint
+        BYTE dr = static_cast<BYTE>(r * 0.70f + 0.5f);
+        BYTE dg = static_cast<BYTE>(g * 0.70f + 0.5f);
+        BYTE db = static_cast<BYTE>(b * 0.70f + 0.5f);
+        return RGB(dr, dg, db);
     }
-    return RGB(72, 78, 90);
+    else
+    {
+        // Lighten the host color towards background in light mode, preserving the host's configured tint
+        BYTE dr = static_cast<BYTE>(r + (255 - r) * 0.35f + 0.5f);
+        BYTE dg = static_cast<BYTE>(g + (255 - g) * 0.35f + 0.5f);
+        BYTE db = static_cast<BYTE>(b + (255 - b) * 0.35f + 0.5f);
+        return RGB(dr, dg, db);
+    }
 }
 
 static int ComputeDigitSlotWidth(HDC hdc)
@@ -443,15 +447,15 @@ static ColumnLayoutMetrics ComputeColumnMetrics(HDC hdc, const std::vector<const
 
 static void DrawSingleColumnEntry(HDC hdc, int rx, int ry, int rw, int rh,
                                   const QuotaDisplayEntry& e, const ColumnLayoutMetrics& m,
-                                  const PluginSettings& settings, COLORREF primaryColor, bool darkMode)
+                                  const PluginSettings& settings, COLORREF labelColor, COLORREF valueColor, bool darkMode)
 {
     DisplayStyle style = settings.displayStyle;
     bool tab = settings.tabularDigits;
     bool aligned = settings.alignColumns;
     bool insidePill = (style == STYLE_PILL_BADGES);
 
-    COLORREF secColor = ComputeSecondaryColor(primaryColor, darkMode, insidePill, settings.dimSecondaryInfo);
-    COLORREF lblColor = ComputeLabelColor(primaryColor, darkMode, insidePill, settings.dimSecondaryInfo);
+    COLORREF secColor = ComputeSecondaryColor(valueColor, darkMode, insidePill, settings.dimSecondaryInfo);
+    COLORREF lblColor = labelColor;
     COLORREF threshColor = GetThresholdColor(e.percent, darkMode);
 
     std::wstring lbl = FormatLabelForStyle(e, style);
@@ -534,7 +538,7 @@ static void DrawSingleColumnEntry(HDC hdc, int rx, int ry, int rw, int rh,
     if (style == STYLE_CLASSIC)
     {
         curX += lw + 2;
-        DrawStyledText(hdc, curX, textY, pw, textH, e.pctText, primaryColor, aligned ? DT_RIGHT : DT_LEFT, tab, m.digitSlotW);
+        DrawStyledText(hdc, curX, textY, pw, textH, e.pctText, valueColor, aligned ? DT_RIGHT : DT_LEFT, tab, m.digitSlotW);
         if (!rst.empty())
         {
             curX += pw + m.gapSmall;
@@ -544,7 +548,7 @@ static void DrawSingleColumnEntry(HDC hdc, int rx, int ry, int rw, int rh,
     else if (style == STYLE_TYPOGRAPHIC)
     {
         curX += lw + m.gapMed;
-        DrawStyledText(hdc, curX, textY, pw, textH, e.pctText, primaryColor, aligned ? DT_RIGHT : DT_LEFT, tab, m.digitSlotW);
+        DrawStyledText(hdc, curX, textY, pw, textH, e.pctText, valueColor, aligned ? DT_RIGHT : DT_LEFT, tab, m.digitSlotW);
         if (!rst.empty())
         {
             curX += pw + m.gapSmall;
@@ -556,7 +560,7 @@ static void DrawSingleColumnEntry(HDC hdc, int rx, int ry, int rw, int rh,
     else if (style == STYLE_PROGRESS_BAR)
     {
         curX += lw + m.gapMed + m.barW + m.gapMed;
-        DrawStyledText(hdc, curX, textY, pw, textH, e.pctText, primaryColor, aligned ? DT_RIGHT : DT_LEFT, tab, m.digitSlotW);
+        DrawStyledText(hdc, curX, textY, pw, textH, e.pctText, valueColor, aligned ? DT_RIGHT : DT_LEFT, tab, m.digitSlotW);
         if (!rst.empty())
         {
             curX += pw + m.gapMed;
@@ -566,12 +570,12 @@ static void DrawSingleColumnEntry(HDC hdc, int rx, int ry, int rw, int rh,
     else if (style == STYLE_MINIMAL_DOTS)
     {
         curX += lw + m.gapSmall;
-        DrawStyledText(hdc, curX, textY, pw, textH, e.pctText, primaryColor, DT_LEFT, tab, m.digitSlotW);
+        DrawStyledText(hdc, curX, textY, pw, textH, e.pctText, valueColor, DT_LEFT, tab, m.digitSlotW);
     }
     else if (style == STYLE_PILL_BADGES)
     {
         curX += lw + m.gapMed;
-        DrawStyledText(hdc, curX, textY, pw, textH, e.pctText, primaryColor, aligned ? DT_RIGHT : DT_LEFT, tab, m.digitSlotW);
+        DrawStyledText(hdc, curX, textY, pw, textH, e.pctText, valueColor, aligned ? DT_RIGHT : DT_LEFT, tab, m.digitSlotW);
         if (!rst.empty())
         {
             curX += pw + m.gapMed + m.clockW + m.clockGap;
@@ -672,10 +676,13 @@ void CPluginItem::DrawItem(void* hDC, int x, int y, int w, int h, bool dark_mode
     int prevBkMode = SetBkMode(hdc, TRANSPARENT);
     COLORREF prevColor = GetTextColor(hdc);
 
-    COLORREF primaryColor = prevColor;
-    if (dark_mode && primaryColor == RGB(0, 0, 0)) primaryColor = RGB(255, 255, 255);
-    if (!dark_mode && primaryColor == RGB(255, 255, 255)) primaryColor = RGB(0, 0, 0);
-    SetTextColor(hdc, primaryColor);
+    // Host configured text colors from TrafficMonitor:
+    COLORREF hostVal = m_hostValueColor.load(std::memory_order_relaxed);
+    COLORREF hostLbl = m_hostLabelColor.load(std::memory_order_relaxed);
+
+    COLORREF valColor = (hostVal != CLR_INVALID) ? hostVal : prevColor;
+    COLORREF lblColor = (hostLbl != CLR_INVALID) ? hostLbl : valColor;
+    SetTextColor(hdc, valColor);
 
     if (entries.empty())
     {
@@ -709,8 +716,7 @@ void CPluginItem::DrawItem(void* hDC, int x, int y, int w, int h, bool dark_mode
         int dotSize = 0, divW = 0;
         ComputeMinimalDotsWidth(hdc, entries, settings, dotSize, divW);
 
-        COLORREF secColor = ComputeSecondaryColor(primaryColor, dark_mode, false, settings.dimSecondaryInfo);
-        COLORREF lblColor = ComputeLabelColor(primaryColor, dark_mode, false, settings.dimSecondaryInfo);
+        COLORREF secColor = ComputeSecondaryColor(valColor, dark_mode, false, settings.dimSecondaryInfo);
 
         EnsureGdiPlus();
         {
@@ -748,7 +754,7 @@ void CPluginItem::DrawItem(void* hDC, int x, int y, int w, int h, bool dark_mode
             int pw = MeasureTextWidth(hdc, entries[i].pctText, settings.tabularDigits, digitSlotW);
             DrawStyledText(hdc, curX, y, lw + 2, h, entries[i].label, lblColor, DT_LEFT, false, digitSlotW);
             curX += lw + gapSmall;
-            DrawStyledText(hdc, curX, y, pw + 2, h, entries[i].pctText, primaryColor, DT_LEFT, settings.tabularDigits, digitSlotW);
+            DrawStyledText(hdc, curX, y, pw + 2, h, entries[i].pctText, valColor, DT_LEFT, settings.tabularDigits, digitSlotW);
             curX += pw;
         }
 
@@ -766,7 +772,7 @@ void CPluginItem::DrawItem(void* hDC, int x, int y, int w, int h, bool dark_mode
         ColumnLayoutMetrics m = ComputeColumnMetrics(hdc, colRows, settings);
         int rowH = (settings.displayStyle == STYLE_PILL_BADGES) ? std::min(h, std::max(18, m.fontH + 6)) : h;
         int rowY = y + (h - rowH) / 2;
-        DrawSingleColumnEntry(hdc, x, rowY, m.totalW, rowH, entries[0], m, settings, primaryColor, dark_mode);
+        DrawSingleColumnEntry(hdc, x, rowY, m.totalW, rowH, entries[0], m, settings, lblColor, valColor, dark_mode);
     }
     else if (entries.size() == 2)
     {
@@ -775,8 +781,8 @@ void CPluginItem::DrawItem(void* hDC, int x, int y, int w, int h, bool dark_mode
         if (h >= 24)
         {
             int halfH = h / 2;
-            DrawSingleColumnEntry(hdc, x, y, m.totalW, halfH, entries[0], m, settings, primaryColor, dark_mode);
-            DrawSingleColumnEntry(hdc, x, y + halfH, m.totalW, h - halfH, entries[1], m, settings, primaryColor, dark_mode);
+            DrawSingleColumnEntry(hdc, x, y, m.totalW, halfH, entries[0], m, settings, lblColor, valColor, dark_mode);
+            DrawSingleColumnEntry(hdc, x, y + halfH, m.totalW, h - halfH, entries[1], m, settings, lblColor, valColor, dark_mode);
         }
         else
         {
@@ -784,8 +790,8 @@ void CPluginItem::DrawItem(void* hDC, int x, int y, int w, int h, bool dark_mode
             std::vector<const QuotaDisplayEntry*> r1 = { &entries[1] };
             ColumnLayoutMetrics m0 = ComputeColumnMetrics(hdc, r0, settings);
             ColumnLayoutMetrics m1 = ComputeColumnMetrics(hdc, r1, settings);
-            DrawSingleColumnEntry(hdc, x, y, m0.totalW, h, entries[0], m0, settings, primaryColor, dark_mode);
-            DrawSingleColumnEntry(hdc, x + m0.totalW + colGap, y, m1.totalW, h, entries[1], m1, settings, primaryColor, dark_mode);
+            DrawSingleColumnEntry(hdc, x, y, m0.totalW, h, entries[0], m0, settings, lblColor, valColor, dark_mode);
+            DrawSingleColumnEntry(hdc, x + m0.totalW + colGap, y, m1.totalW, h, entries[1], m1, settings, lblColor, valColor, dark_mode);
         }
     }
     else // 3 entries: Left column = entries[0] (top) + entries[1] (bottom), Right column = entries[2] (top)
@@ -798,9 +804,9 @@ void CPluginItem::DrawItem(void* hDC, int x, int y, int w, int h, bool dark_mode
         if (h >= 24)
         {
             int halfH = h / 2;
-            DrawSingleColumnEntry(hdc, x, y, leftM.totalW, halfH, entries[0], leftM, settings, primaryColor, dark_mode);
-            DrawSingleColumnEntry(hdc, x, y + halfH, leftM.totalW, h - halfH, entries[1], leftM, settings, primaryColor, dark_mode);
-            DrawSingleColumnEntry(hdc, x + leftM.totalW + colGap, y, rightM.totalW, halfH, entries[2], rightM, settings, primaryColor, dark_mode);
+            DrawSingleColumnEntry(hdc, x, y, leftM.totalW, halfH, entries[0], leftM, settings, lblColor, valColor, dark_mode);
+            DrawSingleColumnEntry(hdc, x, y + halfH, leftM.totalW, h - halfH, entries[1], leftM, settings, lblColor, valColor, dark_mode);
+            DrawSingleColumnEntry(hdc, x + leftM.totalW + colGap, y, rightM.totalW, halfH, entries[2], rightM, settings, lblColor, valColor, dark_mode);
         }
         else
         {
@@ -808,10 +814,10 @@ void CPluginItem::DrawItem(void* hDC, int x, int y, int w, int h, bool dark_mode
             std::vector<const QuotaDisplayEntry*> r1 = { &entries[1] };
             ColumnLayoutMetrics m0 = ComputeColumnMetrics(hdc, r0, settings);
             ColumnLayoutMetrics m1 = ComputeColumnMetrics(hdc, r1, settings);
-            DrawSingleColumnEntry(hdc, x, y, m0.totalW, h, entries[0], m0, settings, primaryColor, dark_mode);
+            DrawSingleColumnEntry(hdc, x, y, m0.totalW, h, entries[0], m0, settings, lblColor, valColor, dark_mode);
             int x1 = x + m0.totalW + colGap;
-            DrawSingleColumnEntry(hdc, x1, y, m1.totalW, h, entries[1], m1, settings, primaryColor, dark_mode);
-            DrawSingleColumnEntry(hdc, x1 + m1.totalW + colGap, y, rightM.totalW, h, entries[2], rightM, settings, primaryColor, dark_mode);
+            DrawSingleColumnEntry(hdc, x1, y, m1.totalW, h, entries[1], m1, settings, lblColor, valColor, dark_mode);
+            DrawSingleColumnEntry(hdc, x1 + m1.totalW + colGap, y, rightM.totalW, h, entries[2], rightM, settings, lblColor, valColor, dark_mode);
         }
     }
 
@@ -861,7 +867,25 @@ void CAntigravityPlugin::OnExtenedInfo(ExtendedInfoIndex index, const wchar_t* d
         }
     };
 
-    if (index == EI_TASKBAR_WND_NOT_SHOW_PERCENT)
+    if (index == EI_LABEL_TEXT_COLOR)
+    {
+        wchar_t* endPtr = nullptr;
+        COLORREF clr = static_cast<COLORREF>(wcstoul(data, &endPtr, 10));
+        m_itemCombined.SetHostLabelColor(clr);
+        m_itemGemini.SetHostLabelColor(clr);
+        m_itemClaude.SetHostLabelColor(clr);
+        m_itemAccount.SetHostLabelColor(clr);
+    }
+    else if (index == EI_VALUE_TEXT_COLOR)
+    {
+        wchar_t* endPtr = nullptr;
+        COLORREF clr = static_cast<COLORREF>(wcstoul(data, &endPtr, 10));
+        m_itemCombined.SetHostValueColor(clr);
+        m_itemGemini.SetHostValueColor(clr);
+        m_itemClaude.SetHostValueColor(clr);
+        m_itemAccount.SetHostValueColor(clr);
+    }
+    else if (index == EI_TASKBAR_WND_NOT_SHOW_PERCENT)
     {
         bool hide = (*data == L'1' || _wcsicmp(data, L"true") == 0);
         m_taskbarHidePercent = hide;

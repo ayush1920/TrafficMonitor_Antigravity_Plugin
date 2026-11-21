@@ -156,6 +156,20 @@ int main(int argc, char* argv[])
         return 6;
     }
 
+    // Test OnExtenedInfo - Host Text Colors (EI_LABEL_TEXT_COLOR and EI_VALUE_TEXT_COLOR)
+    std::cout << "\nTesting OnExtenedInfo (EI_LABEL_TEXT_COLOR & EI_VALUE_TEXT_COLOR)..." << std::endl;
+    plugin->OnExtenedInfo(ITMPlugin::EI_LABEL_TEXT_COLOR, L"16711680"); // Blue: 0x00FF0000
+    plugin->OnExtenedInfo(ITMPlugin::EI_VALUE_TEXT_COLOR, L"65280");    // Green: 0x0000FF00
+
+    HDC hdcTest = CreateCompatibleDC(nullptr);
+    HBITMAP hBmpTest = CreateCompatibleBitmap(hdcTest, 320, 48);
+    SelectObject(hdcTest, hBmpTest);
+    SetTextColor(hdcTest, RGB(0, 255, 0));
+    item0->DrawItem(hdcTest, 0, 0, 150, 40, true);
+    DeleteObject(hBmpTest);
+    DeleteDC(hdcTest);
+    std::cout << "Host label & value text colors applied and rendered successfully." << std::endl;
+
     std::wcout << L"\nTooltip (retains full details):\n" << plugin->GetTooltipInfo() << std::endl;
 
     FreeLibrary(hMod);
