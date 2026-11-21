@@ -57,20 +57,29 @@ int main(int argc, char* argv[])
                    << L" [Checked: " << plugin->IsCommandChecked(i) << L"]" << std::endl;
     }
 
-    // Toggle Short Reset Time command (index 1)
-    std::cout << "\nToggling Command 1 (Short Reset Time)..." << std::endl;
-    plugin->OnPluginCommand(1, nullptr, nullptr);
-    std::wcout << L"After toggle - Command 1 Checked: " << plugin->IsCommandChecked(1) << std::endl;
-    std::wcout << L"After toggle - Line 1: " << item0->GetItemLableText() << std::endl;
-    std::wcout << L"After toggle - Line 2: " << item0->GetItemValueText() << std::endl;
+    // Toggle Command 2 (Short Reset Time)
+    std::cout << "\nToggling Command 2 (Short Reset Time)..." << std::endl;
+    plugin->OnPluginCommand(2, nullptr, nullptr);
+    std::wcout << L"After toggle Short - Command 2 Checked: " << plugin->IsCommandChecked(2) << std::endl;
+    std::wcout << L"After toggle Short - Line 1: " << item0->GetItemLableText() << std::endl;
+    std::wcout << L"After toggle Short - Line 2: " << item0->GetItemValueText() << std::endl;
 
-    // Toggle back to original
-    std::cout << "\nToggling back..." << std::endl;
+    // Toggle Command 1 (Hide Reset Time)
+    std::cout << "\nToggling Command 1 (Hide Reset Time)..." << std::endl;
     plugin->OnPluginCommand(1, nullptr, nullptr);
-    std::wcout << L"Original restored - Line 1: " << item0->GetItemLableText() << std::endl;
-    std::wcout << L"Original restored - Line 2: " << item0->GetItemValueText() << std::endl;
+    std::wcout << L"After toggle Hide - Command 1 Checked: " << plugin->IsCommandChecked(1) << std::endl;
+    std::wcout << L"After toggle Hide - Line 1: " << item0->GetItemLableText() << std::endl;
+    std::wcout << L"After toggle Hide - Line 2: " << item0->GetItemValueText() << std::endl;
 
-    std::wcout << L"\nTooltip:\n" << plugin->GetTooltipInfo() << std::endl;
+    // Toggle back to unhidden
+    std::cout << "\nToggling Hide back..." << std::endl;
+    plugin->OnPluginCommand(1, nullptr, nullptr);
+    // Toggle Short back to Long
+    plugin->OnPluginCommand(2, nullptr, nullptr);
+    std::wcout << L"Long form restored - Line 1: " << item0->GetItemLableText() << std::endl;
+    std::wcout << L"Long form restored - Line 2: " << item0->GetItemValueText() << std::endl;
+
+    std::wcout << L"\nTooltip (retains full details):\n" << plugin->GetTooltipInfo() << std::endl;
 
     FreeLibrary(hMod);
     std::cout << "Verification SUCCESS!" << std::endl;

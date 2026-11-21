@@ -205,8 +205,8 @@ std::wstring CAntigravityPlugin::GetConfigPath() const
 void CAntigravityPlugin::LoadSettings()
 {
     std::wstring cfg = GetConfigPath();
-    int val = GetPrivateProfileIntW(L"Display", L"ShortResetTime", 0, cfg.c_str());
-    m_settings.shortResetTime = (val != 0);
+    m_settings.shortResetTime = (GetPrivateProfileIntW(L"Display", L"ShortResetTime", 0, cfg.c_str()) != 0);
+    m_settings.hideResetTime = (GetPrivateProfileIntW(L"Display", L"HideResetTime", 0, cfg.c_str()) != 0);
 }
 
 void CAntigravityPlugin::SaveSettings()
@@ -219,6 +219,7 @@ void CAntigravityPlugin::SaveSettings()
         CreateDirectoryW(dir.c_str(), nullptr);
     }
     WritePrivateProfileStringW(L"Display", L"ShortResetTime", m_settings.shortResetTime ? L"1" : L"0", cfg.c_str());
+    WritePrivateProfileStringW(L"Display", L"HideResetTime", m_settings.hideResetTime ? L"1" : L"0", cfg.c_str());
 }
 
 void CAntigravityPlugin::ApplySettings(const PluginSettings& settings)
@@ -281,18 +282,20 @@ const wchar_t* CAntigravityPlugin::GetCommandName(int command_index)
     switch (command_index)
     {
     case 0: return L"Refresh Quota Vault";
-    case 1: return L"Short Reset Time (e.g. 5h)";
+    case 1: return L"Hide Reset Time";
+    case 2: return L"Short Reset Time (e.g. 5h)";
     default: return nullptr;
     }
 }
 
 int CAntigravityPlugin::IsCommandChecked(int command_index)
 {
-    if (command_index == 1)
+    switch (command_index)
     {
-        return m_settings.shortResetTime ? 1 : 0;
+    case 1: return m_settings.hideResetTime ? 1 : 0;
+    case 2: return (!m_settings.hideResetTime && m_settings.shortResetTime) ? 1 : 0;
+    default: return 0;
     }
-    return 0;
 }
 
 void CAntigravityPlugin::OnPluginCommand(int command_index, void* hWnd, void* para)
@@ -308,7 +311,21 @@ void CAntigravityPlugin::OnPluginCommand(int command_index, void* hWnd, void* pa
     else if (command_index == 1)
     {
         PluginSettings s = m_settings;
-        s.shortResetTime = !s.shortResetTime;
+        s.hideResetTime = !s.hideResetTime;
+        ApplySettings(s);
+    }
+    else if (command_index == 2)
+    {
+        PluginSettings s = m_settings;
+        if (s.hideResetTime)
+        {
+            s.hideResetTime = false;
+            s.shortResetTime = true;
+        }
+        else
+        {
+            s.shortResetTime = !s.shortResetTime;
+        }
         ApplySettings(s);
     }
 }
@@ -317,6 +334,7 @@ struct OptionsDlgContext
 {
     CAntigravityPlugin* pPlugin;
     bool shortResetTime;
+    bool hideResetTime;
     bool confirmed;
     HFONT hFont;
 };
@@ -338,31 +356,39 @@ static LRESULT CALLBACK OptionsDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
                                  CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
         if (!ctx->hFont) ctx->hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
 
-        HWND hGroup = CreateWindowExW(0, L"BUTTON", L"Reset Time Format",
+        HWND hGroup = CreateWindowExW(0, L"BUTTON", L"Reset Time Display",
                                       WS_CHILD | WS_VISIBLE | BS_GROUPBOX,
-                                      16, 12, 302, 105, hWnd, (HMENU)100, cs->hInstance, nullptr);
+                                      16, 12, 302, 130, hWnd, (HMENU)100, cs->hInstance, nullptr);
         SendMessageW(hGroup, WM_SETFONT, (WPARAM)ctx->hFont, TRUE);
 
         HWND hRadio1 = CreateWindowExW(0, L"BUTTON", L"Long form  (e.g. 4h 50m, 6d 23h)",
                                        WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON | WS_GROUP | WS_TABSTOP,
-                                       32, 38, 270, 24, hWnd, (HMENU)101, cs->hInstance, nullptr);
+                                       32, 36, 270, 24, hWnd, (HMENU)101, cs->hInstance, nullptr);
         SendMessageW(hRadio1, WM_SETFONT, (WPARAM)ctx->hFont, TRUE);
 
         HWND hRadio2 = CreateWindowExW(0, L"BUTTON", L"Short form  (e.g. 5h, 7d)",
                                        WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON,
-                                       32, 72, 270, 24, hWnd, (HMENU)102, cs->hInstance, nullptr);
+                                       32, 66, 270, 24, hWnd, (HMENU)102, cs->hInstance, nullptr);
         SendMessageW(hRadio2, WM_SETFONT, (WPARAM)ctx->hFont, TRUE);
 
-        CheckRadioButton(hWnd, 101, 102, ctx->shortResetTime ? 102 : 101);
+        HWND hRadio3 = CreateWindowExW(0, L"BUTTON", L"Hide reset time  (Percentages only)",
+                                       WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON,
+                                       32, 96, 270, 24, hWnd, (HMENU)103, cs->hInstance, nullptr);
+        SendMessageW(hRadio3, WM_SETFONT, (WPARAM)ctx->hFont, TRUE);
+
+        int activeRadio = 101;
+        if (ctx->hideResetTime) activeRadio = 103;
+        else if (ctx->shortResetTime) activeRadio = 102;
+        CheckRadioButton(hWnd, 101, 103, activeRadio);
 
         HWND hBtnOk = CreateWindowExW(0, L"BUTTON", L"OK",
                                       WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON | WS_TABSTOP,
-                                      125, 135, 85, 28, hWnd, (HMENU)IDOK, cs->hInstance, nullptr);
+                                      125, 155, 85, 28, hWnd, (HMENU)IDOK, cs->hInstance, nullptr);
         SendMessageW(hBtnOk, WM_SETFONT, (WPARAM)ctx->hFont, TRUE);
 
         HWND hBtnCancel = CreateWindowExW(0, L"BUTTON", L"Cancel",
                                           WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_TABSTOP,
-                                          225, 135, 85, 28, hWnd, (HMENU)IDCANCEL, cs->hInstance, nullptr);
+                                          225, 155, 85, 28, hWnd, (HMENU)IDCANCEL, cs->hInstance, nullptr);
         SendMessageW(hBtnCancel, WM_SETFONT, (WPARAM)ctx->hFont, TRUE);
 
         return 0;
@@ -375,7 +401,20 @@ static LRESULT CALLBACK OptionsDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
         {
             if (ctx)
             {
-                ctx->shortResetTime = (IsDlgButtonChecked(hWnd, 102) == BST_CHECKED);
+                if (IsDlgButtonChecked(hWnd, 103) == BST_CHECKED)
+                {
+                    ctx->hideResetTime = true;
+                }
+                else if (IsDlgButtonChecked(hWnd, 102) == BST_CHECKED)
+                {
+                    ctx->hideResetTime = false;
+                    ctx->shortResetTime = true;
+                }
+                else
+                {
+                    ctx->hideResetTime = false;
+                    ctx->shortResetTime = false;
+                }
                 ctx->confirmed = true;
             }
             DestroyWindow(hWnd);
@@ -439,11 +478,12 @@ ITMPlugin::OptionReturn CAntigravityPlugin::ShowOptionsDialog(void* hParent)
     OptionsDlgContext ctx;
     ctx.pPlugin = this;
     ctx.shortResetTime = m_settings.shortResetTime;
+    ctx.hideResetTime = m_settings.hideResetTime;
     ctx.confirmed = false;
     ctx.hFont = nullptr;
 
     int width = 345;
-    int height = 215;
+    int height = 235;
     int x = (GetSystemMetrics(SM_CXSCREEN) - width) / 2;
     int y = (GetSystemMetrics(SM_CYSCREEN) - height) / 2;
     if (hWndParent && IsWindow(hWndParent))
@@ -493,10 +533,11 @@ ITMPlugin::OptionReturn CAntigravityPlugin::ShowOptionsDialog(void* hParent)
 
     if (ctx.confirmed)
     {
-        if (ctx.shortResetTime != m_settings.shortResetTime)
+        if (ctx.shortResetTime != m_settings.shortResetTime || ctx.hideResetTime != m_settings.hideResetTime)
         {
             PluginSettings newSettings = m_settings;
             newSettings.shortResetTime = ctx.shortResetTime;
+            newSettings.hideResetTime = ctx.hideResetTime;
             ApplySettings(newSettings);
             return OR_OPTION_CHANGED;
         }
@@ -678,8 +719,8 @@ void CAntigravityPlugin::ParseAndUpdate(const std::string& jsonStr)
         int cPct = (int)std::round(c5h * 100.0);
         if (cPct < 0) cPct = 0; if (cPct > 100) cPct = 100;
 
-        std::wstring gReset = FormatResetTime(g5hReset, m_settings.shortResetTime);
-        std::wstring cReset = FormatResetTime(c5hReset, m_settings.shortResetTime);
+        std::wstring gReset = m_settings.hideResetTime ? L"" : FormatResetTime(g5hReset, m_settings.shortResetTime);
+        std::wstring cReset = m_settings.hideResetTime ? L"" : FormatResetTime(c5hReset, m_settings.shortResetTime);
 
         std::wstring gStr = L"G:" + std::to_wstring(gPct) + L"%";
         if (!gReset.empty()) gStr += L" (" + gReset + L")";
@@ -692,7 +733,7 @@ void CAntigravityPlugin::ParseAndUpdate(const std::string& jsonStr)
         {
             int aPct = (int)std::round(aWeekly * 100.0);
             if (aPct < 0) aPct = 0; if (aPct > 100) aPct = 100;
-            std::wstring aReset = FormatResetTime(aWeeklyReset, m_settings.shortResetTime);
+            std::wstring aReset = m_settings.hideResetTime ? L"" : FormatResetTime(aWeeklyReset, m_settings.shortResetTime);
             std::wstring aStr = L"A:" + std::to_wstring(aPct) + L"%";
             if (!aReset.empty()) aStr += L" (" + aReset + L")";
             line1 += L"  " + aStr;

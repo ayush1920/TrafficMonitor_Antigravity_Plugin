@@ -74,6 +74,7 @@ private:
 struct PluginSettings
 {
     bool shortResetTime = false; // false = Long form (4h59m), true = Short form (5h)
+    bool hideResetTime = false;  // true = Hide reset time completely from taskbar interface
 };
 
 class CAntigravityPlugin : public ITMPlugin
@@ -89,7 +90,7 @@ public:
     virtual OptionReturn ShowOptionsDialog(void* hParent) override;
     virtual const wchar_t* GetInfo(PluginInfoIndex index) override;
     virtual const wchar_t* GetTooltipInfo() override;
-    virtual int GetCommandCount() override { return 2; }
+    virtual int GetCommandCount() override { return 3; }
     virtual const wchar_t* GetCommandName(int command_index) override;
     virtual int IsCommandChecked(int command_index) override;
     virtual void OnPluginCommand(int command_index, void* hWnd, void* para) override;
