@@ -163,20 +163,26 @@ static COLORREF ComputeSecondaryColor(COLORREF baseColor, bool darkMode, bool in
     BYTE g = GetGValue(baseColor);
     BYTE b = GetBValue(baseColor);
 
-    if (darkMode)
+    // Compute luminance of the base text color to determine whether the text is dark or light
+    int lum = (r * 299 + g * 587 + b * 114) / 1000;
+    bool textIsDark = (lum < 128);
+
+    if (textIsDark)
     {
-        // Smoothly dim the host color by ~30% in dark mode, preserving the host's configured tint
-        BYTE dr = static_cast<BYTE>(r * 0.70f + 0.5f);
-        BYTE dg = static_cast<BYTE>(g * 0.70f + 0.5f);
-        BYTE db = static_cast<BYTE>(b * 0.70f + 0.5f);
+        // For dark text (e.g. black RGB(0,0,0)), dimming means lightening towards a medium tone
+        // that remains clearly legible against a light background or light pill container.
+        BYTE dr = static_cast<BYTE>(r + (255 - r) * 0.40f + 0.5f);
+        BYTE dg = static_cast<BYTE>(g + (255 - g) * 0.40f + 0.5f);
+        BYTE db = static_cast<BYTE>(b + (255 - b) * 0.40f + 0.5f);
         return RGB(dr, dg, db);
     }
     else
     {
-        // Lighten the host color towards background in light mode, preserving the host's configured tint
-        BYTE dr = static_cast<BYTE>(r + (255 - r) * 0.35f + 0.5f);
-        BYTE dg = static_cast<BYTE>(g + (255 - g) * 0.35f + 0.5f);
-        BYTE db = static_cast<BYTE>(b + (255 - b) * 0.35f + 0.5f);
+        // For light text (e.g. white RGB(255,255,255)), dimming means dimming by ~30% towards dark
+        // while preserving the host's configured tint.
+        BYTE dr = static_cast<BYTE>(r * 0.70f + 0.5f);
+        BYTE dg = static_cast<BYTE>(g * 0.70f + 0.5f);
+        BYTE db = static_cast<BYTE>(b * 0.70f + 0.5f);
         return RGB(dr, dg, db);
     }
 }
@@ -480,8 +486,13 @@ static void DrawSingleColumnEntry(HDC hdc, int rx, int ry, int rw, int rh,
             Gdiplus::REAL phRect = (Gdiplus::REAL)(rh - padV * 2 - 1);
             Gdiplus::REAL radius = std::min(5.0f, phRect * 0.28f);
 
-            COLORREF fillClr = darkMode ? RGB(34, 38, 46) : RGB(236, 240, 246);
-            COLORREF borderClr = darkMode ? RGB(66, 73, 88) : RGB(194, 202, 216);
+            // Container fill and border MUST adapt to the text inside for crystal-clear readability
+            int valLum = (GetRValue(valueColor) * 299 + GetGValue(valueColor) * 587 + GetBValue(valueColor) * 114) / 1000;
+            int lblLum = (GetRValue(lblColor) * 299 + GetGValue(lblColor) * 587 + GetBValue(lblColor) * 114) / 1000;
+            bool textIsDark = (std::min(valLum, lblLum) < 128);
+
+            COLORREF fillClr = textIsDark ? RGB(240, 243, 248) : RGB(34, 38, 46);
+            COLORREF borderClr = textIsDark ? RGB(188, 196, 208) : RGB(66, 73, 88);
 
             Gdiplus::GraphicsPath path;
             AddRoundedRectPath(path, px, py, pwRect, phRect, radius);
@@ -509,7 +520,9 @@ static void DrawSingleColumnEntry(HDC hdc, int rx, int ry, int rw, int rh,
             Gdiplus::REAL bh = (Gdiplus::REAL)barH;
             Gdiplus::REAL r = bh * 0.5f;
 
-            COLORREF trackClr = darkMode ? RGB(54, 60, 72) : RGB(202, 208, 218);
+            int valLum = (GetRValue(valueColor) * 299 + GetGValue(valueColor) * 587 + GetBValue(valueColor) * 114) / 1000;
+            bool textIsDark = (valLum < 128);
+            COLORREF trackClr = textIsDark ? RGB(202, 208, 218) : RGB(54, 60, 72);
             Gdiplus::GraphicsPath trackPath;
             AddRoundedRectPath(trackPath, bx, by, bw, bh, r);
             Gdiplus::SolidBrush trackBrush(ToGpColor(trackClr));
@@ -613,10 +626,75 @@ static int ComputeInterColGap(int digitSlotW, DisplayStyle style)
     return std::max(14, digitSlotW * 2);
 }
 
+class CFontNormalizerGuard
+{
+public:
+    explicit CFontNormalizerGuard(HDC hdc) : m_hdc(hdc), m_hOldFont(nullptr), m_hTempFont(nullptr)
+    {
+        if (!m_hdc) return;
+        HFONT curFont = (HFONT)GetCurrentObject(m_hdc, OBJ_FONT);
+        if (curFont)
+        {
+            LOGFONTW lf{};
+            if (GetObjectW(curFont, sizeof(lf), &lf))
+            {
+                // If parent window specified regular weight (lfWeight <= FW_NORMAL 400),
+                // but the font face name has a "Semibold" or "SemiBold" suffix (e.g. "Segoe UI Semibold"),
+                // GDI would render weight 600 whereas TrafficMonitor's DirectWrite renders weight 400.
+                // Normalize by stripping the "Semibold" suffix so GDI matches the parent window's actual weight.
+                if (lf.lfWeight <= FW_NORMAL)
+                {
+                    std::wstring name(lf.lfFaceName);
+                    std::wstring lower;
+                    lower.reserve(name.size());
+                    for (wchar_t c : name) lower.push_back(towlower(c));
+
+                    const wchar_t* suffixes[] = { L" semibold", L" semi-bold", L" semi bold" };
+                    for (const wchar_t* sfx : suffixes)
+                    {
+                        size_t pos = lower.rfind(sfx);
+                        if (pos != std::wstring::npos && pos + wcslen(sfx) == lower.size())
+                        {
+                            lf.lfFaceName[pos] = L'\0';
+                            m_hTempFont = CreateFontIndirectW(&lf);
+                            if (m_hTempFont)
+                            {
+                                m_hOldFont = (HFONT)SelectObject(m_hdc, m_hTempFont);
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    ~CFontNormalizerGuard()
+    {
+        if (m_hOldFont && m_hdc)
+        {
+            SelectObject(m_hdc, m_hOldFont);
+        }
+        if (m_hTempFont)
+        {
+            DeleteObject(m_hTempFont);
+        }
+    }
+
+    CFontNormalizerGuard(const CFontNormalizerGuard&) = delete;
+    CFontNormalizerGuard& operator=(const CFontNormalizerGuard&) = delete;
+
+private:
+    HDC m_hdc{nullptr};
+    HFONT m_hOldFont{nullptr};
+    HFONT m_hTempFont{nullptr};
+};
+
 int CPluginItem::GetItemWidthEx(void* hDC) const
 {
     if (!hDC) return 110;
     HDC hdc = static_cast<HDC>(hDC);
+    CFontNormalizerGuard fontGuard(hdc);
 
     std::vector<QuotaDisplayEntry> entries;
     PluginSettings settings;
@@ -664,6 +742,7 @@ int CPluginItem::GetItemWidthEx(void* hDC) const
 void CPluginItem::DrawItem(void* hDC, int x, int y, int w, int h, bool dark_mode)
 {
     HDC hdc = static_cast<HDC>(hDC);
+    CFontNormalizerGuard fontGuard(hdc);
 
     std::vector<QuotaDisplayEntry> entries;
     PluginSettings settings;
@@ -1265,7 +1344,7 @@ static LRESULT CALLBACK OptionsDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
                      L"Minimal Status Dots  (\x25CF G 73% | \x25CF A 84% \x2014 compact, timer in tooltip)",
                      BS_AUTORADIOBUTTON, 30, 136, 396, 22);
         AddDlgButton(hWnd, hi, ctx->hFont, IDC_STYLE_PILL_BADGES,
-                     L"Stacked Pill Badges  (Dark rounded pills with aligned metric & clock icon)",
+                     L"Stacked Pill Badges  (Adaptive rounded pills with aligned metric & clock icon)",
                      BS_AUTORADIOBUTTON, 30, 160, 396, 22);
         AddDlgButton(hWnd, hi, ctx->hFont, IDC_STYLE_CLASSIC,
                      L"Classic  (G:73% (4h) \x2014 original text formatting)",
