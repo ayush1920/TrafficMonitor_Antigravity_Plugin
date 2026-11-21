@@ -86,6 +86,28 @@ int main(int argc, char* argv[])
     std::wcout << L"Defaults restored - Line 1: " << item0->GetItemLableText() << std::endl;
     std::wcout << L"Defaults restored - Line 2: " << item0->GetItemValueText() << std::endl;
 
+    // Test OnExtenedInfo - EI_TASKBAR_WND_NOT_SHOW_PERCENT (Controlled by host TrafficMonitor)
+    std::cout << "\nTesting OnExtenedInfo (EI_TASKBAR_WND_NOT_SHOW_PERCENT)..." << std::endl;
+    plugin->OnExtenedInfo(ITMPlugin::EI_TASKBAR_WND_NOT_SHOW_PERCENT, L"1");
+    std::wcout << L"After host hides percent - Line 1: " << item0->GetItemLableText() << std::endl;
+    std::wcout << L"After host hides percent - Line 2: " << item0->GetItemValueText() << std::endl;
+    if (std::wstring(item0->GetItemLableText()).find(L"%") != std::wstring::npos)
+    {
+        std::cerr << "Error: '%' should be hidden when host sets EI_TASKBAR_WND_NOT_SHOW_PERCENT to 1!" << std::endl;
+        FreeLibrary(hMod);
+        return 5;
+    }
+
+    plugin->OnExtenedInfo(ITMPlugin::EI_TASKBAR_WND_NOT_SHOW_PERCENT, L"0");
+    std::wcout << L"After host shows percent - Line 1: " << item0->GetItemLableText() << std::endl;
+    std::wcout << L"After host shows percent - Line 2: " << item0->GetItemValueText() << std::endl;
+    if (std::wstring(item0->GetItemLableText()).find(L"%") == std::wstring::npos)
+    {
+        std::cerr << "Error: '%' should be visible when host sets EI_TASKBAR_WND_NOT_SHOW_PERCENT to 0!" << std::endl;
+        FreeLibrary(hMod);
+        return 6;
+    }
+
     std::wcout << L"\nTooltip (retains full details):\n" << plugin->GetTooltipInfo() << std::endl;
 
     FreeLibrary(hMod);

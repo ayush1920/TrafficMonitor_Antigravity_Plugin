@@ -36,6 +36,12 @@ Smart Mode intelligently adapts the taskbar display based on real-time quota con
 - **Short Form**: Minimalist countdown representation (e.g., `5h`, `7d`).
 - **Hide Reset Time**: Completely hides reset times, showing clean percentage indicators only (e.g., `G:100% C:100%`).
 
+### 3. Native Percent (%) Factor Control
+Following the standard convention established in the [TrafficMonitor Copilot Plugin](https://github.com/ayush1920/TrafficMonitor_Copilot_Plugin), the `%` symbol display is controlled directly by TrafficMonitor's host application settings:
+- In TrafficMonitor, go to **Options** (`选项设置`) $\to$ **Taskbar Window Settings** or **Main Window Settings**.
+- Check or uncheck **Don't show '%'** (`不显示百分号`).
+- The plugin immediately reacts via `OnExtenedInfo` (`EI_TASKBAR_WND_NOT_SHOW_PERCENT` / `EI_MAIN_WND_NOT_SHOW_PERCENT`) to show or hide `%` (e.g., `G:100 (4h59m)` vs `G:100% (4h59m)`), ensuring consistent formatting across all TrafficMonitor widgets.
+
 ---
 
 ## Installation

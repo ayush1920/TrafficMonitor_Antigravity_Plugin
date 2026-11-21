@@ -18,6 +18,7 @@ int main()
     std::cout << "Running Smart Mode state transition tests..." << std::endl;
 
     CAntigravityPlugin plugin;
+    PluginSettings originalSettings = plugin.GetSettings();
     PluginSettings s;
     s.smartMode = true;
     s.hideResetTime = true; // Use percentages only for clear string checks
@@ -96,6 +97,36 @@ int main()
     assert(l1.find(L"G:85%") != std::wstring::npos);
     assert(l2.find(L"Wk:100%") != std::wstring::npos);
 
-    std::cout << "\nALL 9 TRANSITION TESTS PASSED PERFECTLY!" << std::endl;
+    // 10. Test Host TrafficMonitor controlling % factor via OnExtenedInfo
+    plugin.OnExtenedInfo(ITMPlugin::EI_TASKBAR_WND_NOT_SHOW_PERCENT, L"1");
+    l1 = item0->GetItemLableText();
+    l2 = item0->GetItemValueText();
+    std::wcout << L"Host hides %: Line 1 = " << l1 << L", Line 2 = " << l2 << std::endl;
+    assert(l1.find(L"%") == std::wstring::npos);
+    assert(l2.find(L"%") == std::wstring::npos);
+    assert(l1.find(L"G:85") != std::wstring::npos);
+    assert(l2.find(L"Wk:100") != std::wstring::npos);
+
+    plugin.OnExtenedInfo(ITMPlugin::EI_TASKBAR_WND_NOT_SHOW_PERCENT, L"0");
+    l1 = item0->GetItemLableText();
+    l2 = item0->GetItemValueText();
+    std::wcout << L"Host shows %: Line 1 = " << l1 << L", Line 2 = " << l2 << std::endl;
+    assert(l1.find(L"%") != std::wstring::npos);
+    assert(l2.find(L"%") != std::wstring::npos);
+    assert(l1.find(L"G:85%") != std::wstring::npos);
+    assert(l2.find(L"Wk:100%") != std::wstring::npos);
+
+    // 11. Test Host toggling % during active multi-model drop does NOT collapse Smart Mode state
+    plugin.ParseAndUpdate(MakeJson(0.80, 0.70, 0.65)); // G and C drop
+    plugin.OnExtenedInfo(ITMPlugin::EI_TASKBAR_WND_NOT_SHOW_PERCENT, L"1");
+    l1 = item0->GetItemLableText();
+    l2 = item0->GetItemValueText();
+    std::wcout << L"Multi-drop + host hides %: Line 1 = " << l1 << L", Line 2 = " << l2 << std::endl;
+    assert(l1 == L"G:80");
+    assert(l2 == L"C:70");
+
+    plugin.ApplySettings(originalSettings);
+
+    std::cout << "\nALL 11 TRANSITION AND PERCENT TESTS PASSED PERFECTLY!" << std::endl;
     return 0;
 }

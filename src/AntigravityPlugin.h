@@ -111,10 +111,12 @@ public:
     virtual int IsCommandChecked(int command_index) override;
     virtual void OnPluginCommand(int command_index, void* hWnd, void* para) override;
     virtual void OnInitialize(ITrafficMonitor* pApp) override;
+    virtual void OnExtenedInfo(ExtendedInfoIndex index, const wchar_t* data) override;
 
     const PluginSettings& GetSettings() const { return m_settings; }
     void ApplySettings(const PluginSettings& settings);
-    void ParseAndUpdate(const std::string& jsonStr);
+    void ParseAndUpdate(const std::string& jsonStr, bool updateSmartState = true);
+    bool GetHidePercent() const { return m_hidePercent; }
 
 private:
     std::wstring GetConfigPath() const;
@@ -132,6 +134,9 @@ private:
     int m_lastDroppingCount{0};
     bool m_hasInitialSnapshot{false};
     std::string m_prevAccountEmail;
+    bool m_lastShowG{true};
+    bool m_lastShowC{false};
+    bool m_lastShowA{false};
 
     CPluginItem m_itemCombined; // Item 0: antigravity_quota
     CPluginItem m_itemGemini;   // Item 1: antigravity_gemini
@@ -144,6 +149,13 @@ private:
     FILETIME m_lastWriteTime{0, 0};
     DWORD m_lastFileSize{0};
     bool m_hasLoadedData{false};
+
+    // Percentage display flag controlled by TrafficMonitor main window / taskbar settings
+    bool m_hidePercent{false};
+    bool m_taskbarHidePercent{false};
+    bool m_mainWndHidePercent{false};
+    bool m_taskbarSettingReceived{false};
+    std::string m_lastJsonStr;
 
     ITrafficMonitor* m_pApp{nullptr};
 };

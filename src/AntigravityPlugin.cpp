@@ -182,6 +182,52 @@ void CAntigravityPlugin::OnInitialize(ITrafficMonitor* pApp)
     DataRequired();
 }
 
+void CAntigravityPlugin::OnExtenedInfo(ExtendedInfoIndex index, const wchar_t* data)
+{
+    if (!data) return;
+
+    if (index == EI_TASKBAR_WND_NOT_SHOW_PERCENT)
+    {
+        bool hide = (*data == L'1' || _wcsicmp(data, L"true") == 0);
+        m_taskbarHidePercent = hide;
+        m_taskbarSettingReceived = true;
+        if (m_hidePercent != hide)
+        {
+            m_hidePercent = hide;
+            if (!m_lastJsonStr.empty())
+            {
+                ParseAndUpdate(m_lastJsonStr, false);
+            }
+        }
+    }
+    else if (index == EI_MAIN_WND_NOT_SHOW_PERCENT)
+    {
+        bool hide = (*data == L'1' || _wcsicmp(data, L"true") == 0);
+        m_mainWndHidePercent = hide;
+        if (!m_taskbarSettingReceived && m_hidePercent != hide)
+        {
+            m_hidePercent = hide;
+            if (!m_lastJsonStr.empty())
+            {
+                ParseAndUpdate(m_lastJsonStr, false);
+            }
+        }
+    }
+    else if (index == EI_DRAW_TASKBAR_WND)
+    {
+        bool isTaskbar = (*data == L'1');
+        bool targetHide = isTaskbar ? m_taskbarHidePercent : m_mainWndHidePercent;
+        if (m_hidePercent != targetHide)
+        {
+            m_hidePercent = targetHide;
+            if (!m_lastJsonStr.empty())
+            {
+                ParseAndUpdate(m_lastJsonStr, false);
+            }
+        }
+    }
+}
+
 std::wstring CAntigravityPlugin::GetConfigPath() const
 {
     if (m_pApp)
@@ -228,10 +274,17 @@ void CAntigravityPlugin::ApplySettings(const PluginSettings& settings)
 {
     m_settings = settings;
     SaveSettings();
-    m_lastWriteTime.dwLowDateTime = 0;
-    m_lastWriteTime.dwHighDateTime = 0;
-    m_lastFileSize = 0;
-    DataRequired();
+    if (!m_lastJsonStr.empty())
+    {
+        ParseAndUpdate(m_lastJsonStr, false);
+    }
+    else
+    {
+        m_lastWriteTime.dwLowDateTime = 0;
+        m_lastWriteTime.dwHighDateTime = 0;
+        m_lastFileSize = 0;
+        DataRequired();
+    }
 }
 
 IPluginItem* CAntigravityPlugin::GetItem(int index)
@@ -677,8 +730,12 @@ bool CAntigravityPlugin::ReadAndDecryptVault(std::string& outJsonStr)
     return true;
 }
 
-void CAntigravityPlugin::ParseAndUpdate(const std::string& jsonStr)
+void CAntigravityPlugin::ParseAndUpdate(const std::string& jsonStr, bool updateSmartState)
 {
+    if (&jsonStr != &m_lastJsonStr)
+    {
+        m_lastJsonStr = jsonStr;
+    }
     try
     {
         json j = json::parse(jsonStr, nullptr, false);
@@ -759,19 +816,21 @@ void CAntigravityPlugin::ParseAndUpdate(const std::string& jsonStr)
         std::wstring gWeeklyResetFmt = m_settings.hideResetTime ? L"" : FormatResetTime(gWeeklyReset, m_settings.shortResetTime);
         std::wstring cWeeklyResetFmt = m_settings.hideResetTime ? L"" : FormatResetTime(cWeeklyReset, m_settings.shortResetTime);
 
-        std::wstring gStr = L"G:" + std::to_wstring(gPct) + L"%";
+        std::wstring pctSuffix = m_hidePercent ? L"" : L"%";
+
+        std::wstring gStr = L"G:" + std::to_wstring(gPct) + pctSuffix;
         if (!gReset.empty()) gStr += L" (" + gReset + L")";
 
-        std::wstring cStr = L"C:" + std::to_wstring(cPct) + L"%";
+        std::wstring cStr = L"C:" + std::to_wstring(cPct) + pctSuffix;
         if (!cReset.empty()) cStr += L" (" + cReset + L")";
 
-        std::wstring aStr = L"A:" + std::to_wstring(aPct) + L"%";
+        std::wstring aStr = L"A:" + std::to_wstring(aPct) + pctSuffix;
         if (!aReset.empty()) aStr += L" (" + aReset + L")";
 
-        std::wstring gWeeklyStr = L"Wk:" + std::to_wstring(gWeeklyPct) + L"%";
+        std::wstring gWeeklyStr = L"Wk:" + std::to_wstring(gWeeklyPct) + pctSuffix;
         if (!gWeeklyResetFmt.empty()) gWeeklyStr += L" (" + gWeeklyResetFmt + L")";
 
-        std::wstring cWeeklyStr = L"Wk:" + std::to_wstring(cWeeklyPct) + L"%";
+        std::wstring cWeeklyStr = L"Wk:" + std::to_wstring(cWeeklyPct) + pctSuffix;
         if (!cWeeklyResetFmt.empty()) cWeeklyStr += L" (" + cWeeklyResetFmt + L")";
 
         std::wstring line1;
@@ -790,65 +849,82 @@ void CAntigravityPlugin::ParseAndUpdate(const std::string& jsonStr)
         else
         {
             // Smart Mode (Option C): Dynamic Quota Tracking
-            // Detect decreasing quota between intervals.
-            bool gDrop = false;
-            bool cDrop = false;
-            bool aDrop = false;
-
-            if (m_hasInitialSnapshot && email == m_prevAccountEmail)
-            {
-                if (m_prevQuota.g5h >= 0.0 && g5h < m_prevQuota.g5h - 0.0001) gDrop = true;
-                if (m_prevQuota.c5h >= 0.0 && c5h < m_prevQuota.c5h - 0.0001) cDrop = true;
-                if (hasArgon && m_prevQuota.aWeekly >= 0.0 && aWeekly < m_prevQuota.aWeekly - 0.0001) aDrop = true;
-            }
-
-            int dropCount = (gDrop ? 1 : 0) + (cDrop ? 1 : 0) + (aDrop ? 1 : 0);
-
             bool showG = false;
             bool showC = false;
             bool showA = false;
 
-            if (dropCount == 1)
+            if (updateSmartState)
             {
-                if (gDrop)
+                // Detect decreasing quota between intervals.
+                bool gDrop = false;
+                bool cDrop = false;
+                bool aDrop = false;
+
+                if (m_hasInitialSnapshot && email == m_prevAccountEmail)
+                {
+                    if (m_prevQuota.g5h >= 0.0 && g5h < m_prevQuota.g5h - 0.0001) gDrop = true;
+                    if (m_prevQuota.c5h >= 0.0 && c5h < m_prevQuota.c5h - 0.0001) cDrop = true;
+                    if (hasArgon && m_prevQuota.aWeekly >= 0.0 && aWeekly < m_prevQuota.aWeekly - 0.0001) aDrop = true;
+                }
+
+                int dropCount = (gDrop ? 1 : 0) + (cDrop ? 1 : 0) + (aDrop ? 1 : 0);
+
+                if (dropCount == 1)
+                {
+                    if (gDrop)
+                    {
+                        showG = true;
+                        m_lastSingleDroppingModel = MODEL_GEMINI;
+                    }
+                    else if (cDrop)
+                    {
+                        showC = true;
+                        m_lastSingleDroppingModel = MODEL_CLAUDE;
+                    }
+                    else if (aDrop)
+                    {
+                        showA = true;
+                        m_lastSingleDroppingModel = MODEL_ARGON;
+                    }
+                    m_lastDroppingCount = 1;
+                }
+                else if (dropCount > 1)
+                {
+                    showG = gDrop;
+                    showC = cDrop;
+                    showA = aDrop;
+                    m_lastDroppingCount = dropCount;
+                }
+                else // dropCount == 0
+                {
+                    if (m_lastDroppingCount == 1)
+                    {
+                        // Retain the single model that was dropping previously
+                        if (m_lastSingleDroppingModel == MODEL_GEMINI) showG = true;
+                        else if (m_lastSingleDroppingModel == MODEL_CLAUDE) showC = true;
+                        else if (m_lastSingleDroppingModel == MODEL_ARGON && hasArgon) showA = true;
+                        else showG = true;
+                    }
+                    else
+                    {
+                        // Multiple dropped previously or startup/idle -> default to Gemini
+                        showG = true;
+                        m_lastDroppingCount = 0;
+                    }
+                }
+
+                m_lastShowG = showG;
+                m_lastShowC = showC;
+                m_lastShowA = showA;
+            }
+            else
+            {
+                showG = m_lastShowG;
+                showC = m_lastShowC;
+                showA = m_lastShowA && hasArgon;
+                if (!showG && !showC && !showA)
                 {
                     showG = true;
-                    m_lastSingleDroppingModel = MODEL_GEMINI;
-                }
-                else if (cDrop)
-                {
-                    showC = true;
-                    m_lastSingleDroppingModel = MODEL_CLAUDE;
-                }
-                else if (aDrop)
-                {
-                    showA = true;
-                    m_lastSingleDroppingModel = MODEL_ARGON;
-                }
-                m_lastDroppingCount = 1;
-            }
-            else if (dropCount > 1)
-            {
-                showG = gDrop;
-                showC = cDrop;
-                showA = aDrop;
-                m_lastDroppingCount = dropCount;
-            }
-            else // dropCount == 0
-            {
-                if (m_lastDroppingCount == 1)
-                {
-                    // Retain the single model that was dropping previously
-                    if (m_lastSingleDroppingModel == MODEL_GEMINI) showG = true;
-                    else if (m_lastSingleDroppingModel == MODEL_CLAUDE) showC = true;
-                    else if (m_lastSingleDroppingModel == MODEL_ARGON && hasArgon) showA = true;
-                    else showG = true;
-                }
-                else
-                {
-                    // Multiple dropped previously or startup/idle -> default to Gemini
-                    showG = true;
-                    m_lastDroppingCount = 0;
                 }
             }
 
@@ -896,23 +972,26 @@ void CAntigravityPlugin::ParseAndUpdate(const std::string& jsonStr)
             }
         }
 
-        // Update snapshot for subsequent drop detection
-        m_prevQuota.g5h = g5h;
-        m_prevQuota.c5h = c5h;
-        m_prevQuota.aWeekly = hasArgon ? aWeekly : -1.0;
-        m_prevQuota.valid = true;
-        m_prevAccountEmail = email;
-        m_hasInitialSnapshot = true;
+        if (updateSmartState)
+        {
+            // Update snapshot for subsequent drop detection
+            m_prevQuota.g5h = g5h;
+            m_prevQuota.c5h = c5h;
+            m_prevQuota.aWeekly = hasArgon ? aWeekly : -1.0;
+            m_prevQuota.valid = true;
+            m_prevAccountEmail = email;
+            m_hasInitialSnapshot = true;
+        }
 
         // Item 0: Combined
         m_itemCombined.UpdateLabel(line1.c_str());
         m_itemCombined.UpdateValue(line2.c_str());
 
         // Item 1: Gemini
-        m_itemGemini.UpdateValue(gReset.empty() ? (std::to_wstring(gPct) + L"%").c_str() : (std::to_wstring(gPct) + L"% (" + gReset + L")").c_str());
+        m_itemGemini.UpdateValue(gReset.empty() ? (std::to_wstring(gPct) + pctSuffix).c_str() : (std::to_wstring(gPct) + pctSuffix + L" (" + gReset + L")").c_str());
 
         // Item 2: Claude
-        m_itemClaude.UpdateValue(cReset.empty() ? (std::to_wstring(cPct) + L"%").c_str() : (std::to_wstring(cPct) + L"% (" + cReset + L")").c_str());
+        m_itemClaude.UpdateValue(cReset.empty() ? (std::to_wstring(cPct) + pctSuffix).c_str() : (std::to_wstring(cPct) + pctSuffix + L" (" + cReset + L")").c_str());
 
         // Item 3: Account
         std::wstring wLabel = Utf8ToWide(label);
