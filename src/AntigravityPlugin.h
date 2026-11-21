@@ -71,6 +71,11 @@ private:
     std::atomic<int> m_activeLabelBuf;
 };
 
+struct PluginSettings
+{
+    bool shortResetTime = false; // false = Long form (4h59m), true = Short form (5h)
+};
+
 class CAntigravityPlugin : public ITMPlugin
 {
 public:
@@ -81,19 +86,28 @@ public:
     virtual int GetAPIVersion() const override { return 8; }
     virtual IPluginItem* GetItem(int index) override;
     virtual void DataRequired() override;
-    virtual OptionReturn ShowOptionsDialog(void* hParent) override { return OR_OPTION_NOT_PROVIDED; }
+    virtual OptionReturn ShowOptionsDialog(void* hParent) override;
     virtual const wchar_t* GetInfo(PluginInfoIndex index) override;
     virtual const wchar_t* GetTooltipInfo() override;
-    virtual int GetCommandCount() override { return 1; }
+    virtual int GetCommandCount() override { return 2; }
     virtual const wchar_t* GetCommandName(int command_index) override;
+    virtual int IsCommandChecked(int command_index) override;
     virtual void OnPluginCommand(int command_index, void* hWnd, void* para) override;
     virtual void OnInitialize(ITrafficMonitor* pApp) override;
 
+    const PluginSettings& GetSettings() const { return m_settings; }
+    void ApplySettings(const PluginSettings& settings);
+
 private:
+    std::wstring GetConfigPath() const;
+    void LoadSettings();
+    void SaveSettings();
     std::wstring ResolveVaultPath() const;
     bool ReadAndDecryptVault(std::string& outJsonStr);
     void ParseAndUpdate(const std::string& jsonStr);
     void UpdateTooltip(const wchar_t* newTooltip);
+
+    PluginSettings m_settings;
 
     CPluginItem m_itemCombined; // Item 0: antigravity_quota
     CPluginItem m_itemGemini;   // Item 1: antigravity_gemini

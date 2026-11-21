@@ -38,18 +38,79 @@ static bool SafeGetBool(const json& j, const char* key, bool defVal = false)
     return defVal;
 }
 
-static std::wstring FormatCompactReset(const std::string& raw)
+static std::wstring FormatResetTime(const std::string& raw, bool shortForm)
 {
     if (raw.empty() || raw == "--") return L"";
-    std::wstring result;
-    for (char c : raw)
+
+    if (!shortForm)
     {
-        if (c != ' ')
+        // Long form: strip spaces (e.g. "4h 50m" -> "4h50m")
+        std::wstring result;
+        for (char c : raw)
         {
-            result.push_back((wchar_t)c);
+            if (c != ' ') result.push_back((wchar_t)c);
+        }
+        return result;
+    }
+
+    // Short form: smart rounding to single unit (e.g. 4h 50m -> 5h, 6d 23h -> 7d)
+    int days = -1, hours = -1, mins = -1;
+    size_t i = 0;
+    while (i < raw.size())
+    {
+        while (i < raw.size() && (raw[i] == ' ' || raw[i] == '\t')) i++;
+        if (i >= raw.size()) break;
+        if (isdigit((unsigned char)raw[i]))
+        {
+            int val = 0;
+            while (i < raw.size() && isdigit((unsigned char)raw[i]))
+            {
+                val = val * 10 + (raw[i] - '0');
+                i++;
+            }
+            while (i < raw.size() && raw[i] == ' ') i++;
+            if (i < raw.size())
+            {
+                char unit = raw[i];
+                if (unit == 'd' || unit == 'D') days = val;
+                else if (unit == 'h' || unit == 'H') hours = val;
+                else if (unit == 'm' || unit == 'M') mins = val;
+                i++;
+            }
+        }
+        else
+        {
+            i++;
         }
     }
-    return result;
+
+    if (days > 0)
+    {
+        if (hours >= 12) days += 1;
+        return std::to_wstring(days) + L"d";
+    }
+    if (days == 0 && hours >= 0)
+    {
+        if (mins >= 30) hours += 1;
+        return std::to_wstring(hours) + L"h";
+    }
+    if (hours > 0)
+    {
+        if (mins >= 30) hours += 1;
+        return std::to_wstring(hours) + L"h";
+    }
+    if (hours == 0 && mins >= 0)
+    {
+        return std::to_wstring(mins) + L"m";
+    }
+    if (mins >= 0)
+    {
+        return std::to_wstring(mins) + L"m";
+    }
+
+    std::wstring fallback;
+    for (char c : raw) if (c != ' ') fallback.push_back((wchar_t)c);
+    return fallback;
 }
 
 int CPluginItem::GetItemWidthEx(void* hDC) const
@@ -110,13 +171,63 @@ CAntigravityPlugin::CAntigravityPlugin()
     wcscpy_s(m_tooltipBuffers[0], L"Antigravity Quota\r\nInitializing...");
     wcscpy_s(m_tooltipBuffers[1], L"Antigravity Quota\r\nInitializing...");
 
-    // Initial read
+    LoadSettings();
     DataRequired();
 }
 
 void CAntigravityPlugin::OnInitialize(ITrafficMonitor* pApp)
 {
     m_pApp = pApp;
+    LoadSettings();
+    DataRequired();
+}
+
+std::wstring CAntigravityPlugin::GetConfigPath() const
+{
+    if (m_pApp)
+    {
+        const wchar_t* pDir = m_pApp->GetPluginConfigDir();
+        if (pDir && *pDir)
+        {
+            return std::wstring(pDir) + L"\\AntigravityPlugin.ini";
+        }
+    }
+
+    wchar_t localAppData[MAX_PATH];
+    DWORD len = GetEnvironmentVariableW(L"LOCALAPPDATA", localAppData, MAX_PATH);
+    if (len > 0 && len < MAX_PATH)
+    {
+        return std::wstring(localAppData) + L"\\AntigravityQuota\\trafficmonitor.ini";
+    }
+    return L"AntigravityPlugin.ini";
+}
+
+void CAntigravityPlugin::LoadSettings()
+{
+    std::wstring cfg = GetConfigPath();
+    int val = GetPrivateProfileIntW(L"Display", L"ShortResetTime", 0, cfg.c_str());
+    m_settings.shortResetTime = (val != 0);
+}
+
+void CAntigravityPlugin::SaveSettings()
+{
+    std::wstring cfg = GetConfigPath();
+    size_t lastSlash = cfg.find_last_of(L"\\/");
+    if (lastSlash != std::wstring::npos)
+    {
+        std::wstring dir = cfg.substr(0, lastSlash);
+        CreateDirectoryW(dir.c_str(), nullptr);
+    }
+    WritePrivateProfileStringW(L"Display", L"ShortResetTime", m_settings.shortResetTime ? L"1" : L"0", cfg.c_str());
+}
+
+void CAntigravityPlugin::ApplySettings(const PluginSettings& settings)
+{
+    m_settings = settings;
+    SaveSettings();
+    m_lastWriteTime.dwLowDateTime = 0;
+    m_lastWriteTime.dwHighDateTime = 0;
+    m_lastFileSize = 0;
     DataRequired();
 }
 
@@ -167,8 +278,21 @@ void CAntigravityPlugin::UpdateTooltip(const wchar_t* newTooltip)
 
 const wchar_t* CAntigravityPlugin::GetCommandName(int command_index)
 {
-    if (command_index == 0) return L"Refresh Quota Vault";
-    return nullptr;
+    switch (command_index)
+    {
+    case 0: return L"Refresh Quota Vault";
+    case 1: return L"Short Reset Time (e.g. 5h)";
+    default: return nullptr;
+    }
+}
+
+int CAntigravityPlugin::IsCommandChecked(int command_index)
+{
+    if (command_index == 1)
+    {
+        return m_settings.shortResetTime ? 1 : 0;
+    }
+    return 0;
 }
 
 void CAntigravityPlugin::OnPluginCommand(int command_index, void* hWnd, void* para)
@@ -181,6 +305,204 @@ void CAntigravityPlugin::OnPluginCommand(int command_index, void* hWnd, void* pa
         m_lastFileSize = 0;
         DataRequired();
     }
+    else if (command_index == 1)
+    {
+        PluginSettings s = m_settings;
+        s.shortResetTime = !s.shortResetTime;
+        ApplySettings(s);
+    }
+}
+
+struct OptionsDlgContext
+{
+    CAntigravityPlugin* pPlugin;
+    bool shortResetTime;
+    bool confirmed;
+    HFONT hFont;
+};
+
+static LRESULT CALLBACK OptionsDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    OptionsDlgContext* ctx = reinterpret_cast<OptionsDlgContext*>(GetWindowLongPtrW(hWnd, GWLP_USERDATA));
+
+    switch (uMsg)
+    {
+    case WM_CREATE:
+    {
+        CREATESTRUCTW* cs = reinterpret_cast<CREATESTRUCTW*>(lParam);
+        ctx = reinterpret_cast<OptionsDlgContext*>(cs->lpCreateParams);
+        SetWindowLongPtrW(hWnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(ctx));
+
+        ctx->hFont = CreateFontW(-12, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                 DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                 CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+        if (!ctx->hFont) ctx->hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
+
+        HWND hGroup = CreateWindowExW(0, L"BUTTON", L"Reset Time Format",
+                                      WS_CHILD | WS_VISIBLE | BS_GROUPBOX,
+                                      16, 12, 302, 105, hWnd, (HMENU)100, cs->hInstance, nullptr);
+        SendMessageW(hGroup, WM_SETFONT, (WPARAM)ctx->hFont, TRUE);
+
+        HWND hRadio1 = CreateWindowExW(0, L"BUTTON", L"Long form  (e.g. 4h 50m, 6d 23h)",
+                                       WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON | WS_GROUP | WS_TABSTOP,
+                                       32, 38, 270, 24, hWnd, (HMENU)101, cs->hInstance, nullptr);
+        SendMessageW(hRadio1, WM_SETFONT, (WPARAM)ctx->hFont, TRUE);
+
+        HWND hRadio2 = CreateWindowExW(0, L"BUTTON", L"Short form  (e.g. 5h, 7d)",
+                                       WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON,
+                                       32, 72, 270, 24, hWnd, (HMENU)102, cs->hInstance, nullptr);
+        SendMessageW(hRadio2, WM_SETFONT, (WPARAM)ctx->hFont, TRUE);
+
+        CheckRadioButton(hWnd, 101, 102, ctx->shortResetTime ? 102 : 101);
+
+        HWND hBtnOk = CreateWindowExW(0, L"BUTTON", L"OK",
+                                      WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON | WS_TABSTOP,
+                                      125, 135, 85, 28, hWnd, (HMENU)IDOK, cs->hInstance, nullptr);
+        SendMessageW(hBtnOk, WM_SETFONT, (WPARAM)ctx->hFont, TRUE);
+
+        HWND hBtnCancel = CreateWindowExW(0, L"BUTTON", L"Cancel",
+                                          WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_TABSTOP,
+                                          225, 135, 85, 28, hWnd, (HMENU)IDCANCEL, cs->hInstance, nullptr);
+        SendMessageW(hBtnCancel, WM_SETFONT, (WPARAM)ctx->hFont, TRUE);
+
+        return 0;
+    }
+
+    case WM_COMMAND:
+    {
+        WORD id = LOWORD(wParam);
+        if (id == IDOK)
+        {
+            if (ctx)
+            {
+                ctx->shortResetTime = (IsDlgButtonChecked(hWnd, 102) == BST_CHECKED);
+                ctx->confirmed = true;
+            }
+            DestroyWindow(hWnd);
+            return 0;
+        }
+        else if (id == IDCANCEL)
+        {
+            if (ctx)
+            {
+                ctx->confirmed = false;
+            }
+            DestroyWindow(hWnd);
+            return 0;
+        }
+        break;
+    }
+
+    case WM_CLOSE:
+    {
+        DestroyWindow(hWnd);
+        return 0;
+    }
+
+    case WM_DESTROY:
+    {
+        if (ctx && ctx->hFont && ctx->hFont != (HFONT)GetStockObject(DEFAULT_GUI_FONT))
+        {
+            DeleteObject(ctx->hFont);
+            ctx->hFont = nullptr;
+        }
+        PostQuitMessage(0);
+        return 0;
+    }
+
+    default:
+        return DefWindowProcW(hWnd, uMsg, wParam, lParam);
+    }
+    return 0;
+}
+
+ITMPlugin::OptionReturn CAntigravityPlugin::ShowOptionsDialog(void* hParent)
+{
+    HWND hWndParent = static_cast<HWND>(hParent);
+    HINSTANCE hInstance = GetModuleHandleW(L"AntigravityPlugin.dll");
+    if (!hInstance) hInstance = GetModuleHandleW(nullptr);
+
+    static bool s_classRegistered = false;
+    const wchar_t* className = L"AntigravityPluginOptionsWnd";
+    if (!s_classRegistered)
+    {
+        WNDCLASSEXW wc = { sizeof(WNDCLASSEXW) };
+        wc.lpfnWndProc = OptionsDlgProc;
+        wc.hInstance = hInstance;
+        wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
+        wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1);
+        wc.lpszClassName = className;
+        RegisterClassExW(&wc);
+        s_classRegistered = true;
+    }
+
+    OptionsDlgContext ctx;
+    ctx.pPlugin = this;
+    ctx.shortResetTime = m_settings.shortResetTime;
+    ctx.confirmed = false;
+    ctx.hFont = nullptr;
+
+    int width = 345;
+    int height = 215;
+    int x = (GetSystemMetrics(SM_CXSCREEN) - width) / 2;
+    int y = (GetSystemMetrics(SM_CYSCREEN) - height) / 2;
+    if (hWndParent && IsWindow(hWndParent))
+    {
+        RECT prc;
+        if (GetWindowRect(hWndParent, &prc))
+        {
+            x = prc.left + ((prc.right - prc.left) - width) / 2;
+            y = prc.top + ((prc.bottom - prc.top) - height) / 2;
+        }
+    }
+
+    HWND hWndDlg = CreateWindowExW(
+        WS_EX_DLGMODALFRAME | WS_EX_TOPMOST,
+        className,
+        L"Antigravity Quota Options",
+        WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
+        x, y, width, height,
+        hWndParent,
+        nullptr,
+        hInstance,
+        &ctx
+    );
+
+    if (!hWndDlg) return OR_OPTION_NOT_PROVIDED;
+
+    if (hWndParent && IsWindow(hWndParent))
+    {
+        EnableWindow(hWndParent, FALSE);
+    }
+
+    MSG msg;
+    while (GetMessageW(&msg, nullptr, 0, 0))
+    {
+        if (!IsDialogMessageW(hWndDlg, &msg))
+        {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+    }
+
+    if (hWndParent && IsWindow(hWndParent))
+    {
+        EnableWindow(hWndParent, TRUE);
+        SetForegroundWindow(hWndParent);
+    }
+
+    if (ctx.confirmed)
+    {
+        if (ctx.shortResetTime != m_settings.shortResetTime)
+        {
+            PluginSettings newSettings = m_settings;
+            newSettings.shortResetTime = ctx.shortResetTime;
+            ApplySettings(newSettings);
+            return OR_OPTION_CHANGED;
+        }
+    }
+
+    return OR_OPTION_UNCHANGED;
 }
 
 std::wstring CAntigravityPlugin::ResolveVaultPath() const
@@ -356,8 +678,8 @@ void CAntigravityPlugin::ParseAndUpdate(const std::string& jsonStr)
         int cPct = (int)std::round(c5h * 100.0);
         if (cPct < 0) cPct = 0; if (cPct > 100) cPct = 100;
 
-        std::wstring gReset = FormatCompactReset(g5hReset);
-        std::wstring cReset = FormatCompactReset(c5hReset);
+        std::wstring gReset = FormatResetTime(g5hReset, m_settings.shortResetTime);
+        std::wstring cReset = FormatResetTime(c5hReset, m_settings.shortResetTime);
 
         std::wstring gStr = L"G:" + std::to_wstring(gPct) + L"%";
         if (!gReset.empty()) gStr += L" (" + gReset + L")";
@@ -370,7 +692,7 @@ void CAntigravityPlugin::ParseAndUpdate(const std::string& jsonStr)
         {
             int aPct = (int)std::round(aWeekly * 100.0);
             if (aPct < 0) aPct = 0; if (aPct > 100) aPct = 100;
-            std::wstring aReset = FormatCompactReset(aWeeklyReset);
+            std::wstring aReset = FormatResetTime(aWeeklyReset, m_settings.shortResetTime);
             std::wstring aStr = L"A:" + std::to_wstring(aPct) + L"%";
             if (!aReset.empty()) aStr += L" (" + aReset + L")";
             line1 += L"  " + aStr;
