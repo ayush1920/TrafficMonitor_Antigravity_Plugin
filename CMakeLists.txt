@@ -34,6 +34,7 @@ target_link_libraries(AntigravityPlugin PRIVATE
     crypt32
     advapi32
     gdi32
+    gdiplus
     user32
 )
 
@@ -62,6 +63,11 @@ if(MSVC)
     target_compile_options(verify_plugin PRIVATE /utf-8)
 endif()
 
+target_link_libraries(verify_plugin PRIVATE
+    gdi32
+    user32
+)
+
 # Smart Mode state transitions test executable
 add_executable(test_smart_transitions
     tests/test_smart_transitions.cpp
@@ -88,6 +94,7 @@ target_link_libraries(test_smart_transitions PRIVATE
     crypt32
     advapi32
     gdi32
+    gdiplus
     user32
 )
 

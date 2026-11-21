@@ -19,28 +19,35 @@ An ultra-lightweight, native C++ (x86 & x64) plugin for **TrafficMonitor** on Wi
 
 ## Display Modes & Visualization Settings
 
-Right-click the plugin on the taskbar to access options or open the **Options Dialog**:
+Right-click the plugin on the taskbar to access quick toggles or open the **Options Dialog** (with live **Apply** preview):
 
-### 1. Smart Mode (Dynamic Quota Tracking)
-> **Default: Disabled (Toggle via right-click menu or Options dialog)**
+### 1. Visual Style Presets
+Choose between five crisp native GDI / GDI+ visual layouts:
+- **Typographic Hierarchy** (Default): Drops noisy colons and parentheses and dims secondary timers for clean instant focus (`G  73% · 4h` / `A  84% · 7d`).
+- **Micro Progress Bars**: Adds a 4px capsule progress bar color-coded by threshold (green `> 50%`, amber `20–50%`, red `< 20%`).
+- **Minimal Status Dots**: Compact horizontal indicator strip with anti-aliased threshold dots (`● G 73% | ● A 84%`), keeping reset timers in the hover tooltip.
+- **Stacked Pill Badges**: Dark rounded pill containers with aligned label, metric, and vector clock timer columns.
+- **Classic**: Traditional colon & parentheses formatting (`G:73% (4h)`).
 
-Smart Mode intelligently adapts the taskbar display based on real-time quota consumption:
-- **Single Active Model**: If only one model is being used (e.g., Claude drops from 80% to 75%), the taskbar displays only that model (Line 1: 5-hour limit, Line 2: Weekly limit).
-- **Multiple Active Models**: If multiple models drop simultaneously (e.g., concurrent Gemini and Claude queries), both models are displayed.
-- **Idle / Zero Drop**: When quotas remain unchanged between intervals:
-  - If a single model was being actively used prior to idling, that model continues to be displayed.
-  - If multiple models were used or on clean system launch, the display cleanly falls back to Gemini.
+### 2. Layout & Polish Options
+- **Align Columns**: Right-aligns percentages and reset timers cleanly beneath one another.
+- **Tabular Fixed-Width Digits**: Draws digits in fixed monospace advance cells so taskbar width never jitters when numbers change.
+- **Dim Secondary Info**: Mutes labels and reset timers visually so primary quota percentages pop first.
 
-### 2. Reset Time Display Options
-- **Long Form** (Default): Detailed countdown format (e.g., `4h 50m`, `6d 23h`).
-- **Short Form**: Minimalist countdown representation (e.g., `5h`, `7d`).
-- **Hide Reset Time**: Completely hides reset times, showing clean percentage indicators only (e.g., `G:100% C:100%`).
+### 3. Smart Mode & Quota Visibility
+- **Smart Mode (Dynamic Quota Tracking)** *(Default: Disabled)*:
+  - **Single Active Model**: Displays only the dropping model (5-hour limit on row 1, optional weekly quota `Wk` on row 2).
+  - **Multiple Active Models**: Displays all models dropping concurrently.
+  - **Idle / Zero Drop**: Retains the previous single active model or cleanly falls back to Gemini after multi-model usage or cold startup.
+- **Hide Weekly Quota (`Wk`)**: Omit the `Wk` row when displaying a single model (weekly tiers remain available in the hover tooltip).
 
-### 3. Native Percent (%) Factor Control
-Following the standard convention established in the [TrafficMonitor Copilot Plugin](https://github.com/ayush1920/TrafficMonitor_Copilot_Plugin), the `%` symbol display is controlled directly by TrafficMonitor's host application settings:
-- In TrafficMonitor, go to **Options** (`选项设置`) $\to$ **Taskbar Window Settings** or **Main Window Settings**.
-- Check or uncheck **Don't show '%'** (`不显示百分号`).
-- The plugin immediately reacts via `OnExtenedInfo` (`EI_TASKBAR_WND_NOT_SHOW_PERCENT` / `EI_MAIN_WND_NOT_SHOW_PERCENT`) to show or hide `%` (e.g., `G:100 (4h59m)` vs `G:100% (4h59m)`), ensuring consistent formatting across all TrafficMonitor widgets.
+### 4. Reset Time Display Options
+- **Hide Reset Time**: Checkbox to hide reset timers on the taskbar while keeping full countdowns in the hover tooltip.
+- **Long Form** (Default): Detailed countdown format (`4h 50m`, `6d 23h`).
+- **Short Form**: Rounded single-unit countdown (`5h`, `7d`).
+
+### 5. Native Percent (%) Factor Control
+Following the standard convention established in the [TrafficMonitor Copilot Plugin](https://github.com/ayush1920/TrafficMonitor_Copilot_Plugin), `%` symbol visibility is controlled directly by TrafficMonitor's host settings (`Don't show '%'` / `不显示百分号` under Main Window or Taskbar Window settings via `OnExtenedInfo`).
 
 ---
 

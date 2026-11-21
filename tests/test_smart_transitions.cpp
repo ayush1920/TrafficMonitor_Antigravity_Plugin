@@ -7,9 +7,9 @@
 std::string MakeJson(double g5h, double c5h, double aWeekly, const std::string& email = "test@example.com")
 {
     std::string s = "[{\"Label\":\"Test\",\"Email\":\"" + email + "\",\"IsActive\":true,"
-                    "\"GFiveH\":" + std::to_string(g5h) + ",\"GWeekly\":1.0,\"GFiveHReset\":\"2026-11-22T05:00:00Z\",\"GWeeklyReset\":\"2026-11-28T05:00:00Z\","
-                    "\"CFiveH\":" + std::to_string(c5h) + ",\"CWeekly\":1.0,\"CFiveHReset\":\"2026-11-22T05:00:00Z\",\"CWeeklyReset\":\"2026-11-28T05:00:00Z\","
-                    "\"HasArgon\":true,\"AWeekly\":" + std::to_string(aWeekly) + ",\"AWeeklyReset\":\"2026-11-28T05:00:00Z\"}]";
+                    "\"GFiveH\":" + std::to_string(g5h) + ",\"GWeekly\":1.0,\"GFiveHReset\":\"4h 25m\",\"GWeeklyReset\":\"6d 23h\","
+                    "\"CFiveH\":" + std::to_string(c5h) + ",\"CWeekly\":1.0,\"CFiveHReset\":\"4h 59m\",\"CWeeklyReset\":\"6d 10h\","
+                    "\"HasArgon\":true,\"AWeekly\":" + std::to_string(aWeekly) + ",\"AWeeklyReset\":\"6d 23h\"}]";
     return s;
 }
 
@@ -22,6 +22,8 @@ int main()
     PluginSettings s;
     s.smartMode = true;
     s.hideResetTime = true; // Use percentages only for clear string checks
+    s.displayStyle = STYLE_CLASSIC;
+    s.hideWeeklyQuota = false;
     plugin.ApplySettings(s);
 
     IPluginItem* item0 = plugin.GetItem(0);
@@ -125,8 +127,84 @@ int main()
     assert(l1 == L"G:80");
     assert(l2 == L"C:70");
 
+    // 12. Test Hide Weekly Quota ('Wk') checkbox in Smart Mode single-model view
+    plugin.OnExtenedInfo(ITMPlugin::EI_TASKBAR_WND_NOT_SHOW_PERCENT, L"0");
+    plugin.ParseAndUpdate(MakeJson(0.80, 0.70, 0.65)); // Idle after multi-drop -> Gemini single
+    assert(std::wstring(item0->GetItemValueText()).find(L"Wk:100%") != std::wstring::npos);
+    s.hideWeeklyQuota = true;
+    plugin.ApplySettings(s);
+    l1 = item0->GetItemLableText();
+    l2 = item0->GetItemValueText();
+    std::wcout << L"Hide Weekly Quota ON: Line 1 = " << l1 << L", Line 2 = '" << l2 << L"'" << std::endl;
+    assert(l1 == L"G:80%");
+    assert(l2.empty());
+
+    // 13. Test Typographic Hierarchy style with reset time
+    s.hideWeeklyQuota = false;
+    s.hideResetTime = false;
+    s.shortResetTime = true;
+    s.displayStyle = STYLE_TYPOGRAPHIC;
+    plugin.ApplySettings(s);
+    l1 = item0->GetItemLableText();
+    l2 = item0->GetItemValueText();
+    std::wcout << L"Typographic Hierarchy: Line 1 = " << l1 << L", Line 2 = " << l2 << std::endl;
+    assert(l1.find(L":") == std::wstring::npos);
+    assert(l1.find(L"(") == std::wstring::npos);
+    assert(l1.find(L"G 80%") != std::wstring::npos);
+    assert(l1.find(L"\x00B7") != std::wstring::npos);
+
+    // 14. Test Minimal Status Dots style during multi-model drop
+    s.displayStyle = STYLE_MINIMAL_DOTS;
+    plugin.ApplySettings(s);
+    plugin.ParseAndUpdate(MakeJson(0.75, 0.65, 0.65)); // G and C drop
+    l1 = item0->GetItemLableText();
+    l2 = item0->GetItemValueText();
+    std::wcout << L"Minimal Dots: Line 1 = " << l1 << L", Line 2 = '" << l2 << L"'" << std::endl;
+    assert(l1.find(L"G 75%") != std::wstring::npos);
+    assert(l1.find(L"|") != std::wstring::npos);
+    assert(l1.find(L"C 65%") != std::wstring::npos);
+    assert(l2.empty());
+
+    // 15. Test GDI / GDI+ rendering across all 5 Visual Styles on offscreen DC (1, 2, 3 entries)
+    HDC hdcScreen = GetDC(nullptr);
+    HDC hdcMem = CreateCompatibleDC(hdcScreen);
+    HBITMAP hBmp = CreateCompatibleBitmap(hdcScreen, 400, 60);
+    HBITMAP hOldBmp = (HBITMAP)SelectObject(hdcMem, hBmp);
+    HFONT hFont = CreateFontW(-13, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+                              DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                              CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+    HFONT hOldFont = (HFONT)SelectObject(hdcMem, hFont);
+
+    DisplayStyle styles[] = { STYLE_CLASSIC, STYLE_TYPOGRAPHIC, STYLE_PROGRESS_BAR, STYLE_MINIMAL_DOTS, STYLE_PILL_BADGES };
+    for (DisplayStyle st : styles)
+    {
+        s.displayStyle = st;
+        s.smartMode = false; // Tests 3-entry 2+1 layout
+        plugin.ApplySettings(s);
+        int w3 = item0->GetItemWidthEx(hdcMem);
+        assert(w3 > 30);
+        SetTextColor(hdcMem, RGB(255, 255, 255));
+        item0->DrawItem(hdcMem, 0, 0, w3, 40, true);
+        SetTextColor(hdcMem, RGB(0, 0, 0));
+        item0->DrawItem(hdcMem, 0, 0, w3, 40, false);
+
+        s.smartMode = true;
+        s.hideWeeklyQuota = true; // Tests 1-entry centered layout
+        plugin.ApplySettings(s);
+        int w1 = item0->GetItemWidthEx(hdcMem);
+        assert(w1 > 20);
+        item0->DrawItem(hdcMem, 0, 0, w1, 40, true);
+    }
+
+    SelectObject(hdcMem, hOldFont);
+    DeleteObject(hFont);
+    SelectObject(hdcMem, hOldBmp);
+    DeleteObject(hBmp);
+    DeleteDC(hdcMem);
+    ReleaseDC(nullptr, hdcScreen);
+
     plugin.ApplySettings(originalSettings);
 
-    std::cout << "\nALL 11 TRANSITION AND PERCENT TESTS PASSED PERFECTLY!" << std::endl;
+    std::cout << "\nALL 15 STYLE, POLISH, TRANSITION AND PERCENT TESTS PASSED PERFECTLY!" << std::endl;
     return 0;
 }

@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 #include <atomic>
+#include <mutex>
 #include <cmath>
 #include <algorithm>
 #include "PluginInterface.h"
@@ -14,6 +15,36 @@
 #pragma comment(lib, "advapi32.lib")
 #pragma comment(lib, "gdi32.lib")
 #pragma comment(lib, "user32.lib")
+
+enum DisplayStyle
+{
+    STYLE_CLASSIC = 0,
+    STYLE_TYPOGRAPHIC = 1,
+    STYLE_PROGRESS_BAR = 2,
+    STYLE_MINIMAL_DOTS = 3,
+    STYLE_PILL_BADGES = 4
+};
+
+struct QuotaDisplayEntry
+{
+    std::wstring label;
+    int percent{0};
+    std::wstring pctText;
+    std::wstring resetText;
+    bool isWeekly{false};
+};
+
+struct PluginSettings
+{
+    bool shortResetTime = false;                 // false = Long form (4h59m), true = Short form (5h)
+    bool hideResetTime = false;                  // true = Hide reset time from taskbar interface
+    bool smartMode = false;                      // true = Option C: Only display models whose quota is decreasing
+    bool hideWeeklyQuota = false;                // true = Hide 'Wk' row when showing a single model in Smart Mode
+    DisplayStyle displayStyle = STYLE_TYPOGRAPHIC; // 0=Classic, 1=Typographic, 2=ProgressBar, 3=MinimalDots, 4=PillBadges
+    bool alignColumns = true;                    // true = Right-align numbers & reset times into columns
+    bool tabularDigits = true;                   // true = Monospace/fixed-width digit cells to prevent jitter
+    bool dimSecondaryInfo = true;                // true = Dim secondary info (timers/labels) for visual hierarchy
+};
 
 class CPluginItem : public IPluginItem
 {
@@ -59,6 +90,13 @@ public:
         m_activeLabelBuf.store(next, std::memory_order_release);
     }
 
+    void SetRenderState(const std::vector<QuotaDisplayEntry>& entries, const PluginSettings& settings)
+    {
+        std::lock_guard<std::mutex> lock(m_renderMutex);
+        m_renderEntries = entries;
+        m_renderSettings = settings;
+    }
+
 private:
     std::wstring m_id;
     std::wstring m_name;
@@ -69,6 +107,10 @@ private:
     wchar_t m_labelBuffers[2][256];
     std::atomic<int> m_activeBuf;
     std::atomic<int> m_activeLabelBuf;
+
+    mutable std::mutex m_renderMutex;
+    std::vector<QuotaDisplayEntry> m_renderEntries;
+    PluginSettings m_renderSettings;
 };
 
 enum ActiveModelType
@@ -86,13 +128,6 @@ struct QuotaSnapshot
     bool valid{false};
 };
 
-struct PluginSettings
-{
-    bool shortResetTime = false; // false = Long form (4h59m), true = Short form (5h)
-    bool hideResetTime = false;  // true = Hide reset time completely from taskbar interface
-    bool smartMode = false;      // true = Option C: Only display models whose quota is decreasing
-};
-
 class CAntigravityPlugin : public ITMPlugin
 {
 public:
@@ -106,7 +141,7 @@ public:
     virtual OptionReturn ShowOptionsDialog(void* hParent) override;
     virtual const wchar_t* GetInfo(PluginInfoIndex index) override;
     virtual const wchar_t* GetTooltipInfo() override;
-    virtual int GetCommandCount() override { return 4; }
+    virtual int GetCommandCount() override { return 5; }
     virtual const wchar_t* GetCommandName(int command_index) override;
     virtual int IsCommandChecked(int command_index) override;
     virtual void OnPluginCommand(int command_index, void* hWnd, void* para) override;

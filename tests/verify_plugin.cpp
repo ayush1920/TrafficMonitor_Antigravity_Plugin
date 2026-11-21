@@ -57,6 +57,11 @@ int main(int argc, char* argv[])
                    << L" [Checked: " << plugin->IsCommandChecked(i) << L"]" << std::endl;
     }
 
+    bool origSmart = (plugin->IsCommandChecked(1) != 0);
+    bool origHideWk = (plugin->IsCommandChecked(2) != 0);
+    bool origHideRst = (plugin->IsCommandChecked(3) != 0);
+    bool origShortRst = (plugin->IsCommandChecked(4) != 0);
+
     // Toggle Command 1 (Smart Mode)
     std::cout << "\nToggling Command 1 (Smart Mode)..." << std::endl;
     plugin->OnPluginCommand(1, nullptr, nullptr);
@@ -64,27 +69,70 @@ int main(int argc, char* argv[])
     std::wcout << L"After toggle Smart Mode - Line 1: " << item0->GetItemLableText() << std::endl;
     std::wcout << L"After toggle Smart Mode - Line 2: " << item0->GetItemValueText() << std::endl;
 
-    // Toggle Command 3 (Short Reset Time)
-    std::cout << "\nToggling Command 3 (Short Reset Time)..." << std::endl;
-    plugin->OnPluginCommand(3, nullptr, nullptr);
-    std::wcout << L"After toggle Short - Command 3 Checked: " << plugin->IsCommandChecked(3) << std::endl;
+    // Toggle Command 2 (Hide Weekly Quota)
+    std::cout << "\nToggling Command 2 (Hide Weekly Quota)..." << std::endl;
+    plugin->OnPluginCommand(2, nullptr, nullptr);
+    std::wcout << L"After toggle Hide Weekly - Command 2 Checked: " << plugin->IsCommandChecked(2) << std::endl;
+    std::wcout << L"After toggle Hide Weekly - Line 1: " << item0->GetItemLableText() << std::endl;
+    std::wcout << L"After toggle Hide Weekly - Line 2: " << item0->GetItemValueText() << std::endl;
+
+    // Toggle Command 4 (Short Reset Time)
+    std::cout << "\nToggling Command 4 (Short Reset Time)..." << std::endl;
+    plugin->OnPluginCommand(4, nullptr, nullptr);
+    std::wcout << L"After toggle Short - Command 4 Checked: " << plugin->IsCommandChecked(4) << std::endl;
     std::wcout << L"After toggle Short - Line 1: " << item0->GetItemLableText() << std::endl;
     std::wcout << L"After toggle Short - Line 2: " << item0->GetItemValueText() << std::endl;
 
-    // Toggle Command 2 (Hide Reset Time)
-    std::cout << "\nToggling Command 2 (Hide Reset Time)..." << std::endl;
-    plugin->OnPluginCommand(2, nullptr, nullptr);
-    std::wcout << L"After toggle Hide - Command 2 Checked: " << plugin->IsCommandChecked(2) << std::endl;
+    // Toggle Command 3 (Hide Reset Time)
+    std::cout << "\nToggling Command 3 (Hide Reset Time)..." << std::endl;
+    plugin->OnPluginCommand(3, nullptr, nullptr);
+    std::wcout << L"After toggle Hide - Command 3 Checked: " << plugin->IsCommandChecked(3) << std::endl;
     std::wcout << L"After toggle Hide - Line 1: " << item0->GetItemLableText() << std::endl;
     std::wcout << L"After toggle Hide - Line 2: " << item0->GetItemValueText() << std::endl;
 
-    // Restore to defaults (Smart Mode: OFF, Hide: OFF, Short: OFF)
-    std::cout << "\nRestoring default settings..." << std::endl;
-    if (plugin->IsCommandChecked(1)) plugin->OnPluginCommand(1, nullptr, nullptr);
-    if (plugin->IsCommandChecked(2)) plugin->OnPluginCommand(2, nullptr, nullptr);
-    if (plugin->IsCommandChecked(3)) plugin->OnPluginCommand(3, nullptr, nullptr);
-    std::wcout << L"Defaults restored - Line 1: " << item0->GetItemLableText() << std::endl;
-    std::wcout << L"Defaults restored - Line 2: " << item0->GetItemValueText() << std::endl;
+    // Restore initial settings
+    std::cout << "\nRestoring initial settings..." << std::endl;
+    if ((plugin->IsCommandChecked(1) != 0) != origSmart) plugin->OnPluginCommand(1, nullptr, nullptr);
+    if ((plugin->IsCommandChecked(2) != 0) != origHideWk) plugin->OnPluginCommand(2, nullptr, nullptr);
+    if ((plugin->IsCommandChecked(3) != 0) != origHideRst) plugin->OnPluginCommand(3, nullptr, nullptr);
+    if ((plugin->IsCommandChecked(4) != 0) != origShortRst) plugin->OnPluginCommand(4, nullptr, nullptr);
+    std::wcout << L"Restored - Line 1: " << item0->GetItemLableText() << std::endl;
+    std::wcout << L"Restored - Line 2: " << item0->GetItemValueText() << std::endl;
+
+    // Test CustomDraw rendering onto offscreen memory DC
+    std::cout << "\nTesting GDI / GDI+ CustomDraw rendering..." << std::endl;
+    HDC hdcScreen = GetDC(nullptr);
+    HDC hdcMem = CreateCompatibleDC(hdcScreen);
+    HBITMAP hBmp = CreateCompatibleBitmap(hdcScreen, 320, 48);
+    HBITMAP hOldBmp = (HBITMAP)SelectObject(hdcMem, hBmp);
+    HFONT hFont = CreateFontW(-13, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+                              DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                              CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+    HFONT hOldFont = (HFONT)SelectObject(hdcMem, hFont);
+    int itemW = item0->GetItemWidthEx(hdcMem);
+    std::cout << "Computed GetItemWidthEx: " << itemW << " px" << std::endl;
+    if (itemW <= 20)
+    {
+        std::cerr << "Error: Invalid width returned from GetItemWidthEx!" << std::endl;
+        SelectObject(hdcMem, hOldFont);
+        DeleteObject(hFont);
+        SelectObject(hdcMem, hOldBmp);
+        DeleteObject(hBmp);
+        DeleteDC(hdcMem);
+        ReleaseDC(nullptr, hdcScreen);
+        FreeLibrary(hMod);
+        return 7;
+    }
+    SetTextColor(hdcMem, RGB(255, 255, 255));
+    item0->DrawItem(hdcMem, 0, 0, itemW, 40, true);
+    SetTextColor(hdcMem, RGB(0, 0, 0));
+    item0->DrawItem(hdcMem, 0, 0, itemW, 40, false);
+    SelectObject(hdcMem, hOldFont);
+    DeleteObject(hFont);
+    SelectObject(hdcMem, hOldBmp);
+    DeleteObject(hBmp);
+    DeleteDC(hdcMem);
+    ReleaseDC(nullptr, hdcScreen);
 
     // Test OnExtenedInfo - EI_TASKBAR_WND_NOT_SHOW_PERCENT (Controlled by host TrafficMonitor)
     std::cout << "\nTesting OnExtenedInfo (EI_TASKBAR_WND_NOT_SHOW_PERCENT)..." << std::endl;
