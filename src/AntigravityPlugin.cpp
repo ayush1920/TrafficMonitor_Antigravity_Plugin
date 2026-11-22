@@ -1508,23 +1508,23 @@ static LRESULT CALLBACK OptionsDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
         SendMessageW(hHideWk, BM_SETCHECK, s.hideWeeklyQuota ? BST_CHECKED : BST_UNCHECKED, 0);
 
         // Group 1: Visual Style
-        AddDlgButton(hWnd, hi, ctx->hFont, IDC_GRP_STYLE, L"Visual Style", BS_GROUPBOX, 16, 66, 424, 146);
+        AddDlgButton(hWnd, hi, ctx->hFont, IDC_GRP_STYLE, L"Visual Style", BS_GROUPBOX, 16, 66, 464, 146);
 
         AddDlgButton(hWnd, hi, ctx->hFont, IDC_STYLE_TYPOGRAPHIC,
                      L"Typographic Hierarchy  (G  73% \x00B7 4h \x2014 no colons/parens, dimmed timer)",
-                     BS_AUTORADIOBUTTON | WS_GROUP | WS_TABSTOP, 30, 88, 396, 22);
+                     BS_AUTORADIOBUTTON | WS_GROUP | WS_TABSTOP, 30, 88, 436, 22);
         AddDlgButton(hWnd, hi, ctx->hFont, IDC_STYLE_PROGRESS,
-                     L"Micro Progress Bars  (G  \x2588\x2588\x2588\x2591\x2591  73%  4h \x2014 green/amber/red bar)",
-                     BS_AUTORADIOBUTTON, 30, 112, 396, 22);
+                     L"Micro Progress Bars  (G  \x2588\x2588\x2588\x2591\x2591  73%  4h \x2014 green/yellow/red bar)",
+                     BS_AUTORADIOBUTTON, 30, 112, 436, 22);
         AddDlgButton(hWnd, hi, ctx->hFont, IDC_STYLE_MINIMAL_DOTS,
                      L"Minimal Status Dots  (\x25CF G 73% | \x25CF A 84% \x2014 compact, timer in tooltip)",
-                     BS_AUTORADIOBUTTON, 30, 136, 396, 22);
+                     BS_AUTORADIOBUTTON, 30, 136, 436, 22);
         AddDlgButton(hWnd, hi, ctx->hFont, IDC_STYLE_PILL_BADGES,
-                     L"Stacked Pill Badges  (Adaptive rounded pills with aligned metric & clock icon)",
-                     BS_AUTORADIOBUTTON, 30, 160, 396, 22);
+                     L"Stacked Pill Badges  (Adaptive rounded pills with aligned metric && clock icon)",
+                     BS_AUTORADIOBUTTON, 30, 160, 436, 22);
         AddDlgButton(hWnd, hi, ctx->hFont, IDC_STYLE_CLASSIC,
                      L"Classic  (G:73% (4h) \x2014 original text formatting)",
-                     BS_AUTORADIOBUTTON, 30, 184, 396, 22);
+                     BS_AUTORADIOBUTTON, 30, 184, 436, 22);
 
         int activeStyleId = IDC_STYLE_CLASSIC + (int)s.displayStyle;
         if (activeStyleId < IDC_STYLE_CLASSIC || activeStyleId > IDC_STYLE_PILL_BADGES)
@@ -1532,54 +1532,54 @@ static LRESULT CALLBACK OptionsDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
         CheckRadioButton(hWnd, IDC_STYLE_CLASSIC, IDC_STYLE_PILL_BADGES, activeStyleId);
 
         // Group 2: Layout & Polish
-        AddDlgButton(hWnd, hi, ctx->hFont, IDC_GRP_POLISH, L"Layout && Polish", BS_GROUPBOX | WS_GROUP, 16, 220, 424, 120);
+        AddDlgButton(hWnd, hi, ctx->hFont, IDC_GRP_POLISH, L"Layout && Polish", BS_GROUPBOX | WS_GROUP, 16, 220, 464, 120);
 
         HWND hAlign = AddDlgButton(hWnd, hi, ctx->hFont, IDC_CHK_ALIGN_COLS,
                                    L"Align numbers and reset timers in columns",
-                                   BS_AUTOCHECKBOX | WS_TABSTOP, 30, 240, 396, 22);
+                                   BS_AUTOCHECKBOX | WS_TABSTOP, 30, 240, 436, 22);
         SendMessageW(hAlign, BM_SETCHECK, s.alignColumns ? BST_CHECKED : BST_UNCHECKED, 0);
 
         HWND hTab = AddDlgButton(hWnd, hi, ctx->hFont, IDC_CHK_TABULAR,
                                  L"Tabular / fixed-width digits (prevent taskbar jitter)",
-                                 BS_AUTOCHECKBOX | WS_TABSTOP, 30, 264, 396, 22);
+                                 BS_AUTOCHECKBOX | WS_TABSTOP, 30, 264, 436, 22);
         SendMessageW(hTab, BM_SETCHECK, s.tabularDigits ? BST_CHECKED : BST_UNCHECKED, 0);
 
         HWND hDim = AddDlgButton(hWnd, hi, ctx->hFont, IDC_CHK_DIM_SEC,
                                  L"Dim secondary info (~60% visual weight for labels && timers)",
-                                 BS_AUTOCHECKBOX | WS_TABSTOP, 30, 288, 396, 22);
+                                 BS_AUTOCHECKBOX | WS_TABSTOP, 30, 288, 436, 22);
         SendMessageW(hDim, BM_SETCHECK, s.dimSecondaryInfo ? BST_CHECKED : BST_UNCHECKED, 0);
 
         HWND hHideLabels = AddDlgButton(hWnd, hi, ctx->hFont, IDC_CHK_HIDE_LABELS,
                                         L"Hide model labels  (Omit G, C, A, Wk for a minimal look)",
-                                        BS_AUTOCHECKBOX | WS_TABSTOP, 30, 312, 396, 22);
+                                        BS_AUTOCHECKBOX | WS_TABSTOP, 30, 312, 436, 22);
         SendMessageW(hHideLabels, BM_SETCHECK, s.hideLabels ? BST_CHECKED : BST_UNCHECKED, 0);
 
         // Group 3: Reset Time Display
-        AddDlgButton(hWnd, hi, ctx->hFont, IDC_GRP_RESET, L"Reset Time Display", BS_GROUPBOX, 16, 348, 424, 96);
+        AddDlgButton(hWnd, hi, ctx->hFont, IDC_GRP_RESET, L"Reset Time Display", BS_GROUPBOX, 16, 348, 464, 96);
 
         HWND hHideReset = AddDlgButton(hWnd, hi, ctx->hFont, IDC_CHK_HIDE_RESET,
                                        L"Hide reset time on taskbar (always shown in tooltip)",
-                                       BS_AUTOCHECKBOX | WS_TABSTOP, 30, 368, 396, 22);
+                                       BS_AUTOCHECKBOX | WS_TABSTOP, 30, 368, 436, 22);
         SendMessageW(hHideReset, BM_SETCHECK, s.hideResetTime ? BST_CHECKED : BST_UNCHECKED, 0);
 
         AddDlgButton(hWnd, hi, ctx->hFont, IDC_RADIO_LONG,
                      L"Long form (4h 50m, 6d 23h)",
-                     BS_AUTORADIOBUTTON | WS_GROUP | WS_TABSTOP, 30, 394, 195, 22);
+                     BS_AUTORADIOBUTTON | WS_GROUP | WS_TABSTOP, 30, 394, 210, 22);
         AddDlgButton(hWnd, hi, ctx->hFont, IDC_RADIO_SHORT,
                      L"Short form (5h, 7d)",
-                     BS_AUTORADIOBUTTON, 232, 394, 190, 22);
+                     BS_AUTORADIOBUTTON, 248, 394, 210, 22);
         CheckRadioButton(hWnd, IDC_RADIO_LONG, IDC_RADIO_SHORT, s.shortResetTime ? IDC_RADIO_SHORT : IDC_RADIO_LONG);
 
         HWND hPctNote = CreateWindowExW(0, L"STATIC",
                                         L"Note: '%' sign and labels also respect TrafficMonitor Display Text settings.",
-                                        WS_CHILD | WS_VISIBLE | WS_GROUP, 30, 420, 400, 18,
+                                        WS_CHILD | WS_VISIBLE | WS_GROUP, 30, 420, 440, 18,
                                         hWnd, (HMENU)IDC_LBL_PERCENT_NOTE, hi, nullptr);
         SendMessageW(hPctNote, WM_SETFONT, (WPARAM)ctx->hFont, TRUE);
 
         // Action Buttons: OK / Cancel / Apply
-        AddDlgButton(hWnd, hi, ctx->hFont, IDOK, L"OK", BS_DEFPUSHBUTTON | WS_TABSTOP, 180, 458, 80, 28);
-        AddDlgButton(hWnd, hi, ctx->hFont, IDCANCEL, L"Cancel", BS_PUSHBUTTON | WS_TABSTOP, 270, 458, 80, 28);
-        HWND hApply = AddDlgButton(hWnd, hi, ctx->hFont, IDC_BTN_APPLY, L"Apply", BS_PUSHBUTTON | WS_TABSTOP, 360, 458, 80, 28);
+        AddDlgButton(hWnd, hi, ctx->hFont, IDOK, L"OK", BS_DEFPUSHBUTTON | WS_TABSTOP, 220, 458, 80, 28);
+        AddDlgButton(hWnd, hi, ctx->hFont, IDCANCEL, L"Cancel", BS_PUSHBUTTON | WS_TABSTOP, 310, 458, 80, 28);
+        HWND hApply = AddDlgButton(hWnd, hi, ctx->hFont, IDC_BTN_APPLY, L"Apply", BS_PUSHBUTTON | WS_TABSTOP, 400, 458, 80, 28);
         EnableWindow(hApply, FALSE);
 
         UpdateDependentControlStates(hWnd);
@@ -1693,7 +1693,7 @@ ITMPlugin::OptionReturn CAntigravityPlugin::ShowOptionsDialog(void* hParent)
 
     DWORD dwStyle = WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE;
     DWORD dwExStyle = WS_EX_DLGMODALFRAME | WS_EX_TOPMOST;
-    RECT rc = { 0, 0, 456, 500 };
+    RECT rc = { 0, 0, 496, 500 };
     AdjustWindowRectEx(&rc, dwStyle, FALSE, dwExStyle);
     int width = rc.right - rc.left;
     int height = rc.bottom - rc.top;
