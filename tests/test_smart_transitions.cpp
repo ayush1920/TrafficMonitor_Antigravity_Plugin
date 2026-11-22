@@ -252,6 +252,58 @@ int main()
         std::cout << "Threshold color boundary tests (<=20% red, <=60% yellow, >60% green) passed!" << std::endl;
     }
 
+    // 15c. Test host Display Text Settings verbatim across all 5 Visual Styles
+    {
+        wchar_t tmpDir[MAX_PATH]{};
+        GetTempPathW(MAX_PATH, tmpDir);
+        std::wstring mockCfg = std::wstring(tmpDir) + L"tm_host_labels_test.ini";
+        WritePrivateProfileStringW(L"plugin_display_str_taskbar_window", L"antigravity_gemini", L"G:", mockCfg.c_str());
+        WritePrivateProfileStringW(L"plugin_display_str_taskbar_window", L"antigravity_claude", L"Cl", mockCfg.c_str());
+
+        plugin.SetHostConfigPathOverride(mockCfg);
+        s.hideLabels = false;
+        s.smartMode = false;
+        s.hideResetTime = true;
+        s.hideWeeklyQuota = false;
+
+        DisplayStyle allStyles[] = {
+            STYLE_CLASSIC, STYLE_TYPOGRAPHIC, STYLE_PROGRESS_BAR, STYLE_MINIMAL_DOTS, STYLE_PILL_BADGES
+        };
+        for (DisplayStyle st : allStyles)
+        {
+            s.displayStyle = st;
+            plugin.ApplySettings(s);
+            plugin.ParseAndUpdate(MakeJson(0.85, 0.75, 0.90), false);
+            std::wstring hl1 = item0->GetItemLableText();
+            std::wstring hl2 = item0->GetItemValueText();
+            assert(hl1.find(L"G:") != std::wstring::npos);
+            if (st == STYLE_MINIMAL_DOTS)
+            {
+                assert(hl1.find(L"Cl 75%") != std::wstring::npos);
+            }
+            else
+            {
+                assert(hl2.find(L"Cl 75%") != std::wstring::npos);
+            }
+        }
+
+        // Empty host label clears the label completely in all styles
+        WritePrivateProfileStringW(L"plugin_display_str_taskbar_window", L"antigravity_gemini", L"", mockCfg.c_str());
+        for (DisplayStyle st : allStyles)
+        {
+            s.displayStyle = st;
+            plugin.ApplySettings(s);
+            plugin.ParseAndUpdate(MakeJson(0.85, 0.75, 0.90), false);
+            std::wstring hl1 = item0->GetItemLableText();
+            assert(hl1.find(L"G:") == std::wstring::npos);
+            assert(hl1.find(L"85%") != std::wstring::npos);
+        }
+
+        plugin.SetHostConfigPathOverride(L"");
+        DeleteFileW(mockCfg.c_str());
+        std::cout << "Host Display Text Settings verbatim label tests (all 5 Visual Styles) passed!" << std::endl;
+    }
+
     SelectObject(hdcMem, hOldFont);
     DeleteObject(hFont);
     SelectObject(hdcMem, hOldBmp);

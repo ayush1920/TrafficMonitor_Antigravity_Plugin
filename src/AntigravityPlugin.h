@@ -32,6 +32,7 @@ struct QuotaDisplayEntry
     std::wstring pctText;
     std::wstring resetText;
     bool isWeekly{false};
+    bool labelFromHost{false};
 };
 
 struct PluginSettings
@@ -160,11 +161,12 @@ public:
     void ApplySettings(const PluginSettings& settings);
     void ParseAndUpdate(const std::string& jsonStr, bool updateSmartState = true);
     bool GetHidePercent() const { return m_hidePercent; }
+    void SetHostConfigPathOverride(const std::wstring& path) { m_hostConfigPathOverride = path; }
 
 private:
     std::wstring GetConfigPath() const;
     std::wstring GetHostConfigPath() const;
-    std::wstring ResolveHostItemLabel(const wchar_t* itemId, const wchar_t* defaultLabel) const;
+    std::wstring ResolveHostItemLabel(const wchar_t* itemId, const wchar_t* defaultLabel, bool& outFromHost) const;
     bool HasHostConfigChanged();
     void LoadSettings();
     void SaveSettings();
@@ -217,6 +219,7 @@ private:
     bool m_mainWndHidePercent{false};
     bool m_taskbarSettingReceived{false};
     std::string m_lastJsonStr;
+    std::wstring m_hostConfigPathOverride;
 
     ITrafficMonitor* m_pApp{nullptr};
 };

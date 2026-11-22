@@ -438,6 +438,8 @@ static std::wstring FormatResetForStyle(const QuotaDisplayEntry& e, DisplayStyle
 static std::wstring FormatLabelForStyle(const QuotaDisplayEntry& e, DisplayStyle style)
 {
     if (e.label.empty()) return L"";
+    // Preserve host-configured Display Text Settings verbatim across all Visual Styles.
+    if (e.labelFromHost) return e.label;
     if (style == STYLE_CLASSIC)
     {
         return (e.label.back() == L':') ? e.label : (e.label + L":");
@@ -1135,6 +1137,7 @@ std::wstring CAntigravityPlugin::GetConfigPath() const
 
 std::wstring CAntigravityPlugin::GetHostConfigPath() const
 {
+    if (!m_hostConfigPathOverride.empty()) return m_hostConfigPathOverride;
     if (m_pApp)
     {
         const wchar_t* pDir = m_pApp->GetPluginConfigDir();
@@ -1152,8 +1155,9 @@ std::wstring CAntigravityPlugin::GetHostConfigPath() const
     return L"";
 }
 
-std::wstring CAntigravityPlugin::ResolveHostItemLabel(const wchar_t* itemId, const wchar_t* defaultLabel) const
+std::wstring CAntigravityPlugin::ResolveHostItemLabel(const wchar_t* itemId, const wchar_t* defaultLabel, bool& outFromHost) const
 {
+    outFromHost = false;
     if (m_settings.hideLabels) return L"";
     std::wstring hostCfg = GetHostConfigPath();
     if (!hostCfg.empty() && GetFileAttributesW(hostCfg.c_str()) != INVALID_FILE_ATTRIBUTES)
@@ -1162,6 +1166,7 @@ std::wstring CAntigravityPlugin::ResolveHostItemLabel(const wchar_t* itemId, con
         GetPrivateProfileStringW(L"plugin_display_str_taskbar_window", itemId, L"__TM_UNSET__", buf, 64, hostCfg.c_str());
         if (wcscmp(buf, L"__TM_UNSET__") != 0)
         {
+            outFromHost = true;
             return std::wstring(buf);
         }
     }
@@ -1890,16 +1895,18 @@ void CAntigravityPlugin::ParseAndUpdate(const std::string& jsonStr, bool updateS
 
         std::wstring pctSuffix = m_hidePercent ? L"" : L"%";
 
-        std::wstring lblG = ResolveHostItemLabel(L"antigravity_gemini", L"G");
-        std::wstring lblC = ResolveHostItemLabel(L"antigravity_claude", L"C");
+        bool gFromHost = false;
+        bool cFromHost = false;
+        std::wstring lblG = ResolveHostItemLabel(L"antigravity_gemini", L"G", gFromHost);
+        std::wstring lblC = ResolveHostItemLabel(L"antigravity_claude", L"C", cFromHost);
         std::wstring lblA = m_settings.hideLabels ? L"" : L"A";
         std::wstring lblWk = m_settings.hideLabels ? L"" : L"Wk";
 
-        QuotaDisplayEntry eG{ lblG, gPct, std::to_wstring(gPct) + pctSuffix, gReset, false };
-        QuotaDisplayEntry eC{ lblC, cPct, std::to_wstring(cPct) + pctSuffix, cReset, false };
-        QuotaDisplayEntry eA{ lblA, aPct, std::to_wstring(aPct) + pctSuffix, aReset, false };
-        QuotaDisplayEntry eGWk{ lblWk, gWeeklyPct, std::to_wstring(gWeeklyPct) + pctSuffix, gWeeklyResetFmt, true };
-        QuotaDisplayEntry eCWk{ lblWk, cWeeklyPct, std::to_wstring(cWeeklyPct) + pctSuffix, cWeeklyResetFmt, true };
+        QuotaDisplayEntry eG{ lblG, gPct, std::to_wstring(gPct) + pctSuffix, gReset, false, gFromHost };
+        QuotaDisplayEntry eC{ lblC, cPct, std::to_wstring(cPct) + pctSuffix, cReset, false, cFromHost };
+        QuotaDisplayEntry eA{ lblA, aPct, std::to_wstring(aPct) + pctSuffix, aReset, false, false };
+        QuotaDisplayEntry eGWk{ lblWk, gWeeklyPct, std::to_wstring(gWeeklyPct) + pctSuffix, gWeeklyResetFmt, true, false };
+        QuotaDisplayEntry eCWk{ lblWk, cWeeklyPct, std::to_wstring(cWeeklyPct) + pctSuffix, cWeeklyResetFmt, true, false };
 
         std::vector<QuotaDisplayEntry> entries;
 
@@ -2017,7 +2024,11 @@ void CAntigravityPlugin::ParseAndUpdate(const std::string& jsonStr, bool updateS
             std::wstring lbl = FormatLabelForStyle(e, m_settings.displayStyle);
             std::wstring rst = FormatResetForStyle(e, m_settings.displayStyle);
             if (m_settings.displayStyle == STYLE_CLASSIC)
-                return lbl + e.pctText + (rst.empty() ? L"" : L" " + rst);
+            {
+                std::wstring classicPrefix = lbl;
+                if (!classicPrefix.empty() && classicPrefix.back() != L':') classicPrefix += L" ";
+                return classicPrefix + e.pctText + (rst.empty() ? L"" : L" " + rst);
+            }
             if (m_settings.displayStyle == STYLE_MINIMAL_DOTS)
                 return L"\x25CF " + (lbl.empty() ? L"" : lbl + L" ") + e.pctText;
             if (m_settings.displayStyle == STYLE_TYPOGRAPHIC)
