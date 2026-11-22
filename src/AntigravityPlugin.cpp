@@ -437,8 +437,14 @@ static std::wstring FormatResetForStyle(const QuotaDisplayEntry& e, DisplayStyle
 
 static std::wstring FormatLabelForStyle(const QuotaDisplayEntry& e, DisplayStyle style)
 {
-    if (style == STYLE_CLASSIC) return e.label + L":";
-    return e.label;
+    if (e.label.empty()) return L"";
+    if (style == STYLE_CLASSIC)
+    {
+        return (e.label.back() == L':') ? e.label : (e.label + L":");
+    }
+    std::wstring out = e.label;
+    while (!out.empty() && out.back() == L':') out.pop_back();
+    return out;
 }
 
 static ColumnLayoutMetrics ComputeColumnMetrics(HDC hdc, const std::vector<const QuotaDisplayEntry*>& rows,
@@ -475,7 +481,7 @@ static ColumnLayoutMetrics ComputeColumnMetrics(HDC hdc, const std::vector<const
     {
         std::wstring lbl = FormatLabelForStyle(*pe, style);
         std::wstring rst = FormatResetForStyle(*pe, style);
-        int lw = MeasureTextWidth(hdc, lbl, false, m.digitSlotW);
+        int lw = lbl.empty() ? 0 : MeasureTextWidth(hdc, lbl, false, m.digitSlotW);
         int pw = MeasureTextWidth(hdc, pe->pctText, tab, m.digitSlotW);
         int rw = MeasureTextWidth(hdc, rst, tab, m.digitSlotW);
 
@@ -484,22 +490,23 @@ static ColumnLayoutMetrics ComputeColumnMetrics(HDC hdc, const std::vector<const
         if (rw > m.resetW) m.resetW = rw;
         if (!rst.empty()) m.hasAnyReset = true;
 
-        int rowW = lw;
+        int lblGap = (lw > 0) ? ((style == STYLE_CLASSIC) ? 2 : m.gapMed) : 0;
+        int rowW = lw + lblGap;
         if (style == STYLE_CLASSIC)
         {
-            rowW += 2 + pw + (rw > 0 ? m.gapSmall + rw : 0);
+            rowW += pw + (rw > 0 ? m.gapSmall + rw : 0);
         }
         else if (style == STYLE_TYPOGRAPHIC)
         {
-            rowW += m.gapMed + pw + (rw > 0 ? m.gapSmall + m.sepW + m.gapSmall + rw : 0);
+            rowW += pw + (rw > 0 ? m.gapSmall + m.sepW + m.gapSmall + rw : 0);
         }
         else if (style == STYLE_PROGRESS_BAR)
         {
-            rowW += m.gapMed + m.barW + m.gapMed + pw + (rw > 0 ? m.gapMed + rw : 0);
+            rowW += m.barW + m.gapMed + pw + (rw > 0 ? m.gapMed + rw : 0);
         }
         else if (style == STYLE_PILL_BADGES)
         {
-            rowW = m.padX + lw + m.gapMed + pw + (rw > 0 ? m.gapMed + m.clockW + m.clockGap + rw : 0) + m.padX;
+            rowW = m.padX + lw + lblGap + pw + (rw > 0 ? m.gapMed + m.clockW + m.clockGap + rw : 0) + m.padX;
         }
         if (rowW > maxNaturalTotal) maxNaturalTotal = rowW;
     }
@@ -517,21 +524,22 @@ static ColumnLayoutMetrics ComputeColumnMetrics(HDC hdc, const std::vector<const
     }
     else
     {
+        int colLblGap = (m.labelW > 0) ? ((style == STYLE_CLASSIC) ? 2 : m.gapMed) : 0;
         if (style == STYLE_CLASSIC)
         {
-            m.totalW = m.labelW + 2 + m.pctW + (m.hasAnyReset ? m.gapSmall + m.resetW : 0);
+            m.totalW = m.labelW + colLblGap + m.pctW + (m.hasAnyReset ? m.gapSmall + m.resetW : 0);
         }
         else if (style == STYLE_TYPOGRAPHIC)
         {
-            m.totalW = m.labelW + m.gapMed + m.pctW + (m.hasAnyReset ? m.gapSmall + m.sepW + m.gapSmall + m.resetW : 0);
+            m.totalW = m.labelW + colLblGap + m.pctW + (m.hasAnyReset ? m.gapSmall + m.sepW + m.gapSmall + m.resetW : 0);
         }
         else if (style == STYLE_PROGRESS_BAR)
         {
-            m.totalW = m.labelW + m.gapMed + m.barW + m.gapMed + m.pctW + (m.hasAnyReset ? m.gapMed + m.resetW : 0);
+            m.totalW = m.labelW + colLblGap + m.barW + m.gapMed + m.pctW + (m.hasAnyReset ? m.gapMed + m.resetW : 0);
         }
         else if (style == STYLE_PILL_BADGES)
         {
-            m.totalW = m.padX + m.labelW + m.gapMed + m.pctW +
+            m.totalW = m.padX + m.labelW + colLblGap + m.pctW +
                        (m.hasAnyReset ? m.gapMed + m.clockW + m.clockGap + m.resetW : 0) + m.padX;
         }
         else
@@ -558,7 +566,8 @@ static void DrawSingleColumnEntry(HDC hdc, int rx, int ry, int rw, int rh,
 
     std::wstring lbl = FormatLabelForStyle(e, style);
     std::wstring rst = FormatResetForStyle(e, style);
-    int lw = aligned ? m.labelW : MeasureTextWidth(hdc, lbl, false, m.digitSlotW);
+    int lw = lbl.empty() ? 0 : (aligned ? m.labelW : MeasureTextWidth(hdc, lbl, false, m.digitSlotW));
+    int lblGap = (lw > 0) ? ((style == STYLE_CLASSIC) ? 2 : m.gapMed) : 0;
     int pw = aligned ? m.pctW : MeasureTextWidth(hdc, e.pctText, tab, m.digitSlotW);
     int rstw = aligned ? m.resetW : MeasureTextWidth(hdc, rst, tab, m.digitSlotW);
 
@@ -600,7 +609,7 @@ static void DrawSingleColumnEntry(HDC hdc, int rx, int ry, int rw, int rh,
 
             if (!rst.empty())
             {
-                int clockStartX = rx + m.padX + lw + m.gapMed + pw + m.gapMed;
+                int clockStartX = rx + m.padX + lw + lblGap + pw + m.gapMed;
                 Gdiplus::REAL r = m.clockW * 0.45f;
                 Gdiplus::REAL cx = clockStartX + m.clockW * 0.5f;
                 Gdiplus::REAL cy = ry + rh * 0.5f;
@@ -609,7 +618,7 @@ static void DrawSingleColumnEntry(HDC hdc, int rx, int ry, int rw, int rh,
         }
         else if (style == STYLE_PROGRESS_BAR)
         {
-            int barX = rx + lw + m.gapMed;
+            int barX = rx + lw + lblGap;
             int barH = std::max(3, std::min(5, rh / 4));
             Gdiplus::REAL bx = (Gdiplus::REAL)barX;
             Gdiplus::REAL by = (Gdiplus::REAL)(ry + (rh - barH) / 2.0f);
@@ -643,11 +652,14 @@ static void DrawSingleColumnEntry(HDC hdc, int rx, int ry, int rw, int rh,
     int textY = ry;
     int textH = rh;
 
-    DrawStyledText(hdc, curX, textY, lw + 2, textH, lbl, lblColor, DT_LEFT, false, m.digitSlotW);
+    if (!lbl.empty())
+    {
+        DrawStyledText(hdc, curX, textY, lw + 2, textH, lbl, lblColor, DT_LEFT, false, m.digitSlotW);
+    }
 
     if (style == STYLE_CLASSIC)
     {
-        curX += lw + 2;
+        curX += lw + lblGap;
         DrawStyledText(hdc, curX, textY, pw, textH, e.pctText, valueColor, aligned ? DT_RIGHT : DT_LEFT, tab, m.digitSlotW);
         if (!rst.empty())
         {
@@ -657,7 +669,7 @@ static void DrawSingleColumnEntry(HDC hdc, int rx, int ry, int rw, int rh,
     }
     else if (style == STYLE_TYPOGRAPHIC)
     {
-        curX += lw + m.gapMed;
+        curX += lw + lblGap;
         DrawStyledText(hdc, curX, textY, pw, textH, e.pctText, valueColor, aligned ? DT_RIGHT : DT_LEFT, tab, m.digitSlotW);
         if (!rst.empty())
         {
@@ -669,7 +681,7 @@ static void DrawSingleColumnEntry(HDC hdc, int rx, int ry, int rw, int rh,
     }
     else if (style == STYLE_PROGRESS_BAR)
     {
-        curX += lw + m.gapMed + m.barW + m.gapMed;
+        curX += lw + lblGap + m.barW + m.gapMed;
         DrawStyledText(hdc, curX, textY, pw, textH, e.pctText, valueColor, aligned ? DT_RIGHT : DT_LEFT, tab, m.digitSlotW);
         if (!rst.empty())
         {
@@ -679,12 +691,12 @@ static void DrawSingleColumnEntry(HDC hdc, int rx, int ry, int rw, int rh,
     }
     else if (style == STYLE_MINIMAL_DOTS)
     {
-        curX += lw + m.gapSmall;
+        curX += lw + (lw > 0 ? m.gapSmall : 0);
         DrawStyledText(hdc, curX, textY, pw, textH, e.pctText, valueColor, DT_LEFT, tab, m.digitSlotW);
     }
     else if (style == STYLE_PILL_BADGES)
     {
-        curX += lw + m.gapMed;
+        curX += lw + lblGap;
         DrawStyledText(hdc, curX, textY, pw, textH, e.pctText, valueColor, aligned ? DT_RIGHT : DT_LEFT, tab, m.digitSlotW);
         if (!rst.empty())
         {
@@ -710,9 +722,10 @@ static int ComputeMinimalDotsWidth(HDC hdc, const std::vector<QuotaDisplayEntry>
     for (size_t i = 0; i < entries.size(); ++i)
     {
         if (i > 0) totalW += gapMed + outDivW + gapMed;
-        int lw = MeasureTextWidth(hdc, entries[i].label, false, digitSlotW);
+        std::wstring lbl = FormatLabelForStyle(entries[i], STYLE_MINIMAL_DOTS);
+        int lw = lbl.empty() ? 0 : MeasureTextWidth(hdc, lbl, false, digitSlotW);
         int pw = MeasureTextWidth(hdc, entries[i].pctText, settings.tabularDigits, digitSlotW);
-        totalW += outDotSize + gapSmall + lw + gapSmall + pw;
+        totalW += outDotSize + gapSmall + (lw > 0 ? lw + gapSmall : 0) + pw;
     }
     return totalW;
 }
@@ -735,10 +748,8 @@ public:
             LOGFONTW lf{};
             if (GetObjectW(curFont, sizeof(lf), &lf))
             {
-                // If parent window specified regular weight (lfWeight <= FW_NORMAL 400),
-                // but the font face name has a "Semibold" or "SemiBold" suffix (e.g. "Segoe UI Semibold"),
-                // GDI would render weight 600 whereas TrafficMonitor's DirectWrite renders weight 400.
-                // Normalize by stripping the "Semibold" suffix so GDI matches the parent window's actual weight.
+                // Specifically for Segoe UI Semibold: when parent window passes lfWeight <= 400,
+                // TrafficMonitor's DirectWrite renders Segoe UI at weight 400 while GDI renders 600.
                 if (lf.lfWeight <= FW_NORMAL)
                 {
                     std::wstring name(lf.lfFaceName);
@@ -746,19 +757,22 @@ public:
                     lower.reserve(name.size());
                     for (wchar_t c : name) lower.push_back(towlower(c));
 
-                    const wchar_t* suffixes[] = { L" semibold", L" semi-bold", L" semi bold" };
-                    for (const wchar_t* sfx : suffixes)
+                    if (lower.rfind(L"segoe ui ", 0) == 0)
                     {
-                        size_t pos = lower.rfind(sfx);
-                        if (pos != std::wstring::npos && pos + wcslen(sfx) == lower.size())
+                        const wchar_t* suffixes[] = { L" semibold", L" semi-bold", L" semi bold" };
+                        for (const wchar_t* sfx : suffixes)
                         {
-                            lf.lfFaceName[pos] = L'\0';
-                            m_hTempFont = CreateFontIndirectW(&lf);
-                            if (m_hTempFont)
+                            size_t pos = lower.rfind(sfx);
+                            if (pos != std::wstring::npos && pos + wcslen(sfx) == lower.size())
                             {
-                                m_hOldFont = (HFONT)SelectObject(m_hdc, m_hTempFont);
+                                lf.lfFaceName[pos] = L'\0';
+                                m_hTempFont = CreateFontIndirectW(&lf);
+                                if (m_hTempFont)
+                                {
+                                    m_hOldFont = (HFONT)SelectObject(m_hdc, m_hTempFont);
+                                }
+                                break;
                             }
-                            break;
                         }
                     }
                 }
@@ -915,9 +929,10 @@ void CPluginItem::DrawItem(void* hDC, int x, int y, int w, int h, bool dark_mode
                 Gdiplus::REAL dotY = y + (h - dotSize) * 0.5f;
                 g.FillEllipse(&dotBrush, (Gdiplus::REAL)curX, dotY, (Gdiplus::REAL)dotSize, (Gdiplus::REAL)dotSize);
 
-                int lw = MeasureTextWidth(hdc, entries[i].label, false, digitSlotW);
+                std::wstring lbl = FormatLabelForStyle(entries[i], STYLE_MINIMAL_DOTS);
+                int lw = lbl.empty() ? 0 : MeasureTextWidth(hdc, lbl, false, digitSlotW);
                 int pw = MeasureTextWidth(hdc, entries[i].pctText, settings.tabularDigits, digitSlotW);
-                curX += dotSize + gapSmall + lw + gapSmall + pw;
+                curX += dotSize + gapSmall + (lw > 0 ? lw + gapSmall : 0) + pw;
             }
         }
 
@@ -926,10 +941,14 @@ void CPluginItem::DrawItem(void* hDC, int x, int y, int w, int h, bool dark_mode
         {
             if (i > 0) curX += gapMed + divW + gapMed;
             curX += dotSize + gapSmall;
-            int lw = MeasureTextWidth(hdc, entries[i].label, false, digitSlotW);
+            std::wstring lbl = FormatLabelForStyle(entries[i], STYLE_MINIMAL_DOTS);
+            int lw = lbl.empty() ? 0 : MeasureTextWidth(hdc, lbl, false, digitSlotW);
             int pw = MeasureTextWidth(hdc, entries[i].pctText, settings.tabularDigits, digitSlotW);
-            DrawStyledText(hdc, curX, y, lw + 2, h, entries[i].label, lblColor, DT_LEFT, false, digitSlotW);
-            curX += lw + gapSmall;
+            if (!lbl.empty())
+            {
+                DrawStyledText(hdc, curX, y, lw + 2, h, lbl, lblColor, DT_LEFT, false, digitSlotW);
+                curX += lw + gapSmall;
+            }
             DrawStyledText(hdc, curX, y, pw + 2, h, entries[i].pctText, valColor, DT_LEFT, settings.tabularDigits, digitSlotW);
             curX += pw;
         }
@@ -1114,6 +1133,56 @@ std::wstring CAntigravityPlugin::GetConfigPath() const
     return L"AntigravityPlugin.ini";
 }
 
+std::wstring CAntigravityPlugin::GetHostConfigPath() const
+{
+    if (m_pApp)
+    {
+        const wchar_t* pDir = m_pApp->GetPluginConfigDir();
+        if (pDir && *pDir)
+        {
+            std::wstring dir(pDir);
+            while (!dir.empty() && (dir.back() == L'\\' || dir.back() == L'/')) dir.pop_back();
+            size_t slash = dir.find_last_of(L"\\/");
+            if (slash != std::wstring::npos)
+            {
+                return dir.substr(0, slash) + L"\\config.ini";
+            }
+        }
+    }
+    return L"";
+}
+
+std::wstring CAntigravityPlugin::ResolveHostItemLabel(const wchar_t* itemId, const wchar_t* defaultLabel) const
+{
+    if (m_settings.hideLabels) return L"";
+    std::wstring hostCfg = GetHostConfigPath();
+    if (!hostCfg.empty() && GetFileAttributesW(hostCfg.c_str()) != INVALID_FILE_ATTRIBUTES)
+    {
+        wchar_t buf[64]{};
+        GetPrivateProfileStringW(L"plugin_display_str_taskbar_window", itemId, L"__TM_UNSET__", buf, 64, hostCfg.c_str());
+        if (wcscmp(buf, L"__TM_UNSET__") != 0)
+        {
+            return std::wstring(buf);
+        }
+    }
+    return defaultLabel ? std::wstring(defaultLabel) : L"";
+}
+
+bool CAntigravityPlugin::HasHostConfigChanged()
+{
+    std::wstring hostCfg = GetHostConfigPath();
+    if (hostCfg.empty()) return false;
+    WIN32_FILE_ATTRIBUTE_DATA fad{};
+    if (!GetFileAttributesExW(hostCfg.c_str(), GetFileExInfoStandard, &fad)) return false;
+    if (fad.ftLastWriteTime.dwLowDateTime != m_lastHostCfgWriteTime.dwLowDateTime ||
+        fad.ftLastWriteTime.dwHighDateTime != m_lastHostCfgWriteTime.dwHighDateTime)
+    {
+        m_lastHostCfgWriteTime = fad.ftLastWriteTime;
+        return true;
+    }
+    return false;
+}
+
 void CAntigravityPlugin::LoadSettings()
 {
     std::wstring cfg = GetConfigPath();
@@ -1121,6 +1190,7 @@ void CAntigravityPlugin::LoadSettings()
     m_settings.hideResetTime = (GetPrivateProfileIntW(L"Display", L"HideResetTime", 0, cfg.c_str()) != 0);
     m_settings.smartMode = (GetPrivateProfileIntW(L"Display", L"SmartMode", 0, cfg.c_str()) != 0);
     m_settings.hideWeeklyQuota = (GetPrivateProfileIntW(L"Display", L"HideWeeklyQuota", 0, cfg.c_str()) != 0);
+    m_settings.hideLabels = (GetPrivateProfileIntW(L"Display", L"HideLabels", 0, cfg.c_str()) != 0);
     int styleVal = GetPrivateProfileIntW(L"Display", L"DisplayStyle", (int)STYLE_TYPOGRAPHIC, cfg.c_str());
     if (styleVal < STYLE_CLASSIC || styleVal > STYLE_PILL_BADGES) styleVal = STYLE_TYPOGRAPHIC;
     m_settings.displayStyle = static_cast<DisplayStyle>(styleVal);
@@ -1142,6 +1212,7 @@ void CAntigravityPlugin::SaveSettings()
     WritePrivateProfileStringW(L"Display", L"HideResetTime", m_settings.hideResetTime ? L"1" : L"0", cfg.c_str());
     WritePrivateProfileStringW(L"Display", L"SmartMode", m_settings.smartMode ? L"1" : L"0", cfg.c_str());
     WritePrivateProfileStringW(L"Display", L"HideWeeklyQuota", m_settings.hideWeeklyQuota ? L"1" : L"0", cfg.c_str());
+    WritePrivateProfileStringW(L"Display", L"HideLabels", m_settings.hideLabels ? L"1" : L"0", cfg.c_str());
     WritePrivateProfileStringW(L"Display", L"DisplayStyle", std::to_wstring((int)m_settings.displayStyle).c_str(), cfg.c_str());
     WritePrivateProfileStringW(L"Display", L"AlignColumns", m_settings.alignColumns ? L"1" : L"0", cfg.c_str());
     WritePrivateProfileStringW(L"Display", L"TabularDigits", m_settings.tabularDigits ? L"1" : L"0", cfg.c_str());
@@ -1330,6 +1401,7 @@ enum OptionsCtrlId
     IDC_CHK_ALIGN_COLS = 301,
     IDC_CHK_TABULAR = 302,
     IDC_CHK_DIM_SEC = 303,
+    IDC_CHK_HIDE_LABELS = 304,
 
     IDC_GRP_RESET = 399,
     IDC_CHK_HIDE_RESET = 401,
@@ -1346,6 +1418,7 @@ static bool SettingsEqual(const PluginSettings& a, const PluginSettings& b)
            a.hideResetTime == b.hideResetTime &&
            a.smartMode == b.smartMode &&
            a.hideWeeklyQuota == b.hideWeeklyQuota &&
+           a.hideLabels == b.hideLabels &&
            a.displayStyle == b.displayStyle &&
            a.alignColumns == b.alignColumns &&
            a.tabularDigits == b.tabularDigits &&
@@ -1374,6 +1447,7 @@ static void ReadControlsToSettings(HWND hWnd, PluginSettings& out)
     out.alignColumns = (IsDlgButtonChecked(hWnd, IDC_CHK_ALIGN_COLS) == BST_CHECKED);
     out.tabularDigits = (IsDlgButtonChecked(hWnd, IDC_CHK_TABULAR) == BST_CHECKED);
     out.dimSecondaryInfo = (IsDlgButtonChecked(hWnd, IDC_CHK_DIM_SEC) == BST_CHECKED);
+    out.hideLabels = (IsDlgButtonChecked(hWnd, IDC_CHK_HIDE_LABELS) == BST_CHECKED);
 
     out.hideResetTime = (IsDlgButtonChecked(hWnd, IDC_CHK_HIDE_RESET) == BST_CHECKED);
     out.shortResetTime = (IsDlgButtonChecked(hWnd, IDC_RADIO_SHORT) == BST_CHECKED);
@@ -1453,7 +1527,7 @@ static LRESULT CALLBACK OptionsDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
         CheckRadioButton(hWnd, IDC_STYLE_CLASSIC, IDC_STYLE_PILL_BADGES, activeStyleId);
 
         // Group 2: Layout & Polish
-        AddDlgButton(hWnd, hi, ctx->hFont, IDC_GRP_POLISH, L"Layout && Polish", BS_GROUPBOX | WS_GROUP, 16, 220, 424, 96);
+        AddDlgButton(hWnd, hi, ctx->hFont, IDC_GRP_POLISH, L"Layout && Polish", BS_GROUPBOX | WS_GROUP, 16, 220, 424, 120);
 
         HWND hAlign = AddDlgButton(hWnd, hi, ctx->hFont, IDC_CHK_ALIGN_COLS,
                                    L"Align numbers and reset timers in columns",
@@ -1470,32 +1544,37 @@ static LRESULT CALLBACK OptionsDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
                                  BS_AUTOCHECKBOX | WS_TABSTOP, 30, 288, 396, 22);
         SendMessageW(hDim, BM_SETCHECK, s.dimSecondaryInfo ? BST_CHECKED : BST_UNCHECKED, 0);
 
+        HWND hHideLabels = AddDlgButton(hWnd, hi, ctx->hFont, IDC_CHK_HIDE_LABELS,
+                                        L"Hide model labels  (Omit G, C, A, Wk for a minimal look)",
+                                        BS_AUTOCHECKBOX | WS_TABSTOP, 30, 312, 396, 22);
+        SendMessageW(hHideLabels, BM_SETCHECK, s.hideLabels ? BST_CHECKED : BST_UNCHECKED, 0);
+
         // Group 3: Reset Time Display
-        AddDlgButton(hWnd, hi, ctx->hFont, IDC_GRP_RESET, L"Reset Time Display", BS_GROUPBOX, 16, 324, 424, 96);
+        AddDlgButton(hWnd, hi, ctx->hFont, IDC_GRP_RESET, L"Reset Time Display", BS_GROUPBOX, 16, 348, 424, 96);
 
         HWND hHideReset = AddDlgButton(hWnd, hi, ctx->hFont, IDC_CHK_HIDE_RESET,
                                        L"Hide reset time on taskbar (always shown in tooltip)",
-                                       BS_AUTOCHECKBOX | WS_TABSTOP, 30, 344, 396, 22);
+                                       BS_AUTOCHECKBOX | WS_TABSTOP, 30, 368, 396, 22);
         SendMessageW(hHideReset, BM_SETCHECK, s.hideResetTime ? BST_CHECKED : BST_UNCHECKED, 0);
 
         AddDlgButton(hWnd, hi, ctx->hFont, IDC_RADIO_LONG,
                      L"Long form (4h 50m, 6d 23h)",
-                     BS_AUTORADIOBUTTON | WS_GROUP | WS_TABSTOP, 30, 370, 195, 22);
+                     BS_AUTORADIOBUTTON | WS_GROUP | WS_TABSTOP, 30, 394, 195, 22);
         AddDlgButton(hWnd, hi, ctx->hFont, IDC_RADIO_SHORT,
                      L"Short form (5h, 7d)",
-                     BS_AUTORADIOBUTTON, 232, 370, 190, 22);
+                     BS_AUTORADIOBUTTON, 232, 394, 190, 22);
         CheckRadioButton(hWnd, IDC_RADIO_LONG, IDC_RADIO_SHORT, s.shortResetTime ? IDC_RADIO_SHORT : IDC_RADIO_LONG);
 
         HWND hPctNote = CreateWindowExW(0, L"STATIC",
-                                        L"Note: '%' sign follows TrafficMonitor Main/Taskbar settings.",
-                                        WS_CHILD | WS_VISIBLE | WS_GROUP, 30, 396, 400, 18,
+                                        L"Note: '%' sign and labels also respect TrafficMonitor Display Text settings.",
+                                        WS_CHILD | WS_VISIBLE | WS_GROUP, 30, 420, 400, 18,
                                         hWnd, (HMENU)IDC_LBL_PERCENT_NOTE, hi, nullptr);
         SendMessageW(hPctNote, WM_SETFONT, (WPARAM)ctx->hFont, TRUE);
 
         // Action Buttons: OK / Cancel / Apply
-        AddDlgButton(hWnd, hi, ctx->hFont, IDOK, L"OK", BS_DEFPUSHBUTTON | WS_TABSTOP, 180, 434, 80, 28);
-        AddDlgButton(hWnd, hi, ctx->hFont, IDCANCEL, L"Cancel", BS_PUSHBUTTON | WS_TABSTOP, 270, 434, 80, 28);
-        HWND hApply = AddDlgButton(hWnd, hi, ctx->hFont, IDC_BTN_APPLY, L"Apply", BS_PUSHBUTTON | WS_TABSTOP, 360, 434, 80, 28);
+        AddDlgButton(hWnd, hi, ctx->hFont, IDOK, L"OK", BS_DEFPUSHBUTTON | WS_TABSTOP, 180, 458, 80, 28);
+        AddDlgButton(hWnd, hi, ctx->hFont, IDCANCEL, L"Cancel", BS_PUSHBUTTON | WS_TABSTOP, 270, 458, 80, 28);
+        HWND hApply = AddDlgButton(hWnd, hi, ctx->hFont, IDC_BTN_APPLY, L"Apply", BS_PUSHBUTTON | WS_TABSTOP, 360, 458, 80, 28);
         EnableWindow(hApply, FALSE);
 
         UpdateDependentControlStates(hWnd);
@@ -1542,7 +1621,7 @@ static LRESULT CALLBACK OptionsDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
         else if (notif == BN_CLICKED &&
                  (id == IDC_CHK_SMART || id == IDC_CHK_HIDE_WEEKLY ||
                   (id >= IDC_STYLE_CLASSIC && id <= IDC_STYLE_PILL_BADGES) ||
-                  (id >= IDC_CHK_ALIGN_COLS && id <= IDC_CHK_DIM_SEC) ||
+                  (id >= IDC_CHK_ALIGN_COLS && id <= IDC_CHK_HIDE_LABELS) ||
                   (id >= IDC_CHK_HIDE_RESET && id <= IDC_RADIO_SHORT)))
         {
             UpdateDependentControlStates(hWnd);
@@ -1609,7 +1688,7 @@ ITMPlugin::OptionReturn CAntigravityPlugin::ShowOptionsDialog(void* hParent)
 
     DWORD dwStyle = WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE;
     DWORD dwExStyle = WS_EX_DLGMODALFRAME | WS_EX_TOPMOST;
-    RECT rc = { 0, 0, 456, 476 };
+    RECT rc = { 0, 0, 456, 500 };
     AdjustWindowRectEx(&rc, dwStyle, FALSE, dwExStyle);
     int width = rc.right - rc.left;
     int height = rc.bottom - rc.top;
@@ -1811,11 +1890,16 @@ void CAntigravityPlugin::ParseAndUpdate(const std::string& jsonStr, bool updateS
 
         std::wstring pctSuffix = m_hidePercent ? L"" : L"%";
 
-        QuotaDisplayEntry eG{ L"G", gPct, std::to_wstring(gPct) + pctSuffix, gReset, false };
-        QuotaDisplayEntry eC{ L"C", cPct, std::to_wstring(cPct) + pctSuffix, cReset, false };
-        QuotaDisplayEntry eA{ L"A", aPct, std::to_wstring(aPct) + pctSuffix, aReset, false };
-        QuotaDisplayEntry eGWk{ L"Wk", gWeeklyPct, std::to_wstring(gWeeklyPct) + pctSuffix, gWeeklyResetFmt, true };
-        QuotaDisplayEntry eCWk{ L"Wk", cWeeklyPct, std::to_wstring(cWeeklyPct) + pctSuffix, cWeeklyResetFmt, true };
+        std::wstring lblG = ResolveHostItemLabel(L"antigravity_gemini", L"G");
+        std::wstring lblC = ResolveHostItemLabel(L"antigravity_claude", L"C");
+        std::wstring lblA = m_settings.hideLabels ? L"" : L"A";
+        std::wstring lblWk = m_settings.hideLabels ? L"" : L"Wk";
+
+        QuotaDisplayEntry eG{ lblG, gPct, std::to_wstring(gPct) + pctSuffix, gReset, false };
+        QuotaDisplayEntry eC{ lblC, cPct, std::to_wstring(cPct) + pctSuffix, cReset, false };
+        QuotaDisplayEntry eA{ lblA, aPct, std::to_wstring(aPct) + pctSuffix, aReset, false };
+        QuotaDisplayEntry eGWk{ lblWk, gWeeklyPct, std::to_wstring(gWeeklyPct) + pctSuffix, gWeeklyResetFmt, true };
+        QuotaDisplayEntry eCWk{ lblWk, cWeeklyPct, std::to_wstring(cWeeklyPct) + pctSuffix, cWeeklyResetFmt, true };
 
         std::vector<QuotaDisplayEntry> entries;
 
@@ -1930,14 +2014,15 @@ void CAntigravityPlugin::ParseAndUpdate(const std::string& jsonStr, bool updateS
         }
 
         auto fmtEntry = [&](const QuotaDisplayEntry& e) -> std::wstring {
+            std::wstring lbl = FormatLabelForStyle(e, m_settings.displayStyle);
             std::wstring rst = FormatResetForStyle(e, m_settings.displayStyle);
             if (m_settings.displayStyle == STYLE_CLASSIC)
-                return e.label + L":" + e.pctText + (rst.empty() ? L"" : L" " + rst);
+                return lbl + e.pctText + (rst.empty() ? L"" : L" " + rst);
             if (m_settings.displayStyle == STYLE_MINIMAL_DOTS)
-                return L"\x25CF " + e.label + L" " + e.pctText;
+                return L"\x25CF " + (lbl.empty() ? L"" : lbl + L" ") + e.pctText;
             if (m_settings.displayStyle == STYLE_TYPOGRAPHIC)
-                return e.label + L" " + e.pctText + (rst.empty() ? L"" : L" \x00B7 " + rst);
-            return e.label + L" " + e.pctText + (rst.empty() ? L"" : L" " + rst);
+                return (lbl.empty() ? L"" : lbl + L" ") + e.pctText + (rst.empty() ? L"" : L" \x00B7 " + rst);
+            return (lbl.empty() ? L"" : lbl + L" ") + e.pctText + (rst.empty() ? L"" : L" " + rst);
         };
 
         std::wstring line1;
@@ -1953,7 +2038,7 @@ void CAntigravityPlugin::ParseAndUpdate(const std::string& jsonStr, bool updateS
         else if (entries.size() == 1)
         {
             line1 = fmtEntry(entries[0]);
-            if (m_settings.displayStyle == STYLE_CLASSIC && entries[0].label == L"A" && !m_settings.hideWeeklyQuota)
+            if (m_settings.displayStyle == STYLE_CLASSIC && hasArgon && m_settings.smartMode && m_lastShowA && !m_lastShowG && !m_lastShowC && !m_settings.hideWeeklyQuota)
                 line2 = L"Argon Weekly";
         }
         else if (entries.size() == 2)
@@ -2060,9 +2145,15 @@ void CAntigravityPlugin::DataRequired()
     bool updated = false;
     {
         std::lock_guard<std::mutex> lock(m_dataMutex);
+        bool cfgChanged = HasHostConfigChanged();
         if (ReadAndDecryptVault(jsonStr))
         {
             ParseAndUpdate(jsonStr);
+            updated = true;
+        }
+        else if (cfgChanged && !m_lastJsonStr.empty())
+        {
+            ParseAndUpdate(m_lastJsonStr, false);
             updated = true;
         }
     }

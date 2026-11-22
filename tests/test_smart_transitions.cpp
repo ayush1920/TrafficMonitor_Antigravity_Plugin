@@ -195,6 +195,13 @@ int main()
         int w1 = item0->GetItemWidthEx(hdcMem);
         assert(w1 > 20);
         item0->DrawItem(hdcMem, 0, 0, w1, 40, true);
+
+        s.hideLabels = true;
+        plugin.ApplySettings(s);
+        int wNoLbl = item0->GetItemWidthEx(hdcMem);
+        assert(wNoLbl > 15 && wNoLbl < w1);
+        item0->DrawItem(hdcMem, 0, 0, wNoLbl, 40, true);
+        s.hideLabels = false;
     }
 
     SelectObject(hdcMem, hOldFont);

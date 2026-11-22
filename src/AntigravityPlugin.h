@@ -40,6 +40,7 @@ struct PluginSettings
     bool hideResetTime = false;                  // true = Hide reset time from taskbar interface
     bool smartMode = false;                      // true = Option C: Only display models whose quota is decreasing
     bool hideWeeklyQuota = false;                // true = Hide 'Wk' row when showing a single model in Smart Mode
+    bool hideLabels = false;                     // true = Omit model labels (G, C, A, Wk) for a cleaner look
     DisplayStyle displayStyle = STYLE_TYPOGRAPHIC; // 0=Classic, 1=Typographic, 2=ProgressBar, 3=MinimalDots, 4=PillBadges
     bool alignColumns = true;                    // true = Right-align numbers & reset times into columns
     bool tabularDigits = true;                   // true = Monospace/fixed-width digit cells to prevent jitter
@@ -162,6 +163,9 @@ public:
 
 private:
     std::wstring GetConfigPath() const;
+    std::wstring GetHostConfigPath() const;
+    std::wstring ResolveHostItemLabel(const wchar_t* itemId, const wchar_t* defaultLabel) const;
+    bool HasHostConfigChanged();
     void LoadSettings();
     void SaveSettings();
     std::wstring ResolveVaultPath() const;
@@ -204,6 +208,7 @@ private:
 
     FILETIME m_lastWriteTime{0, 0};
     DWORD m_lastFileSize{0};
+    FILETIME m_lastHostCfgWriteTime{0, 0};
     bool m_hasLoadedData{false};
 
     // Percentage display flag controlled by TrafficMonitor main window / taskbar settings
