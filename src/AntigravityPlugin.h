@@ -120,6 +120,7 @@ private:
     mutable std::mutex m_renderMutex;
     std::vector<QuotaDisplayEntry> m_renderEntries;
     PluginSettings m_renderSettings;
+    mutable std::atomic<int> m_lastDrawH{ 0 };
 };
 
 enum ActiveModelType

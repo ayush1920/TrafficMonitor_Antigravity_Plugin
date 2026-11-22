@@ -803,6 +803,36 @@ private:
     HFONT m_hTempFont{nullptr};
 };
 
+static bool CanStackTwoRows(HDC hdc, int h)
+{
+    if (h <= 0) return true;
+    SIZE szRef = { 0, 0 };
+    GetTextExtentPoint32W(hdc, L"0", 1, &szRef);
+    int fontH = (szRef.cy > 0) ? szRef.cy : 16;
+    // Require >= 1.5x glyph height (min 24px) to stack two rows; single-row slots
+    // (including 125%-150% DPI half-height cells and horizontal arrange) lay out side by side.
+    int minDoubleRowH = std::max(24, (fontH * 3 + 1) / 2);
+    return h >= minDoubleRowH;
+}
+
+static int ComputeSideBySideMetrics(HDC hdc, const std::vector<QuotaDisplayEntry>& entries,
+                                    const PluginSettings& settings, int colGap,
+                                    std::vector<ColumnLayoutMetrics>& outCols)
+{
+    outCols.clear();
+    size_t count = std::min<size_t>(entries.size(), 3);
+    int totalW = 0;
+    for (size_t i = 0; i < count; ++i)
+    {
+        std::vector<const QuotaDisplayEntry*> singleRow = { &entries[i] };
+        ColumnLayoutMetrics cm = ComputeColumnMetrics(hdc, singleRow, settings);
+        if (i > 0) totalW += colGap;
+        totalW += cm.totalW;
+        outCols.push_back(cm);
+    }
+    return totalW;
+}
+
 int CPluginItem::GetItemWidthEx(void* hDC) const
 {
     if (!hDC) return 110;
@@ -817,10 +847,19 @@ int CPluginItem::GetItemWidthEx(void* hDC) const
         settings = m_renderSettings;
     }
 
+    bool canStack = CanStackTwoRows(hdc, m_lastDrawH.load(std::memory_order_relaxed));
+
     if (entries.empty())
     {
         const wchar_t* l1 = m_labelBuffers[m_activeLabelBuf.load(std::memory_order_relaxed)];
         const wchar_t* l2 = m_buffers[m_activeBuf.load(std::memory_order_relaxed)];
+        if (!canStack)
+        {
+            std::wstring combined = std::wstring(l1) + L" " + std::wstring(l2);
+            SIZE sz = { 0, 0 };
+            GetTextExtentPoint32W(hdc, combined.c_str(), (int)combined.size(), &sz);
+            return sz.cx + 4;
+        }
         SIZE sz1 = { 0, 0 }, sz2 = { 0, 0 };
         GetTextExtentPoint32W(hdc, l1, (int)wcslen(l1), &sz1);
         GetTextExtentPoint32W(hdc, l2, (int)wcslen(l2), &sz2);
@@ -835,6 +874,12 @@ int CPluginItem::GetItemWidthEx(void* hDC) const
 
     int digitSlotW = ComputeDigitSlotWidth(hdc);
     int colGap = ComputeInterColGap(digitSlotW, settings.displayStyle);
+
+    if (entries.size() >= 2 && !canStack)
+    {
+        std::vector<ColumnLayoutMetrics> cols;
+        return ComputeSideBySideMetrics(hdc, entries, settings, colGap, cols) + 4;
+    }
 
     if (entries.size() == 1 || entries.size() == 2)
     {
@@ -854,8 +899,11 @@ int CPluginItem::GetItemWidthEx(void* hDC) const
 
 void CPluginItem::DrawItem(void* hDC, int x, int y, int w, int h, bool dark_mode)
 {
+    if (!hDC) return;
     HDC hdc = static_cast<HDC>(hDC);
     CFontNormalizerGuard fontGuard(hdc);
+    if (h > 0) m_lastDrawH.store(h, std::memory_order_relaxed);
+    bool canStack = CanStackTwoRows(hdc, h);
 
     std::vector<QuotaDisplayEntry> entries;
     PluginSettings settings;
@@ -880,7 +928,7 @@ void CPluginItem::DrawItem(void* hDC, int x, int y, int w, int h, bool dark_mode
     {
         const wchar_t* l1 = m_labelBuffers[m_activeLabelBuf.load(std::memory_order_relaxed)];
         const wchar_t* l2 = m_buffers[m_activeBuf.load(std::memory_order_relaxed)];
-        if (h >= 24)
+        if (canStack)
         {
             int halfH = h / 2;
             RECT r1 = { x, y, x + w, y + halfH };
@@ -971,25 +1019,26 @@ void CPluginItem::DrawItem(void* hDC, int x, int y, int w, int h, bool dark_mode
         int rowY = y + (h - rowH) / 2;
         DrawSingleColumnEntry(hdc, x, rowY, m.totalW, rowH, entries[0], m, settings, lblColor, valColor, dark_mode);
     }
+    else if (!canStack)
+    {
+        std::vector<ColumnLayoutMetrics> cols;
+        ComputeSideBySideMetrics(hdc, entries, settings, colGap, cols);
+        int curX = x;
+        for (size_t i = 0; i < cols.size(); ++i)
+        {
+            int rowH = (settings.displayStyle == STYLE_PILL_BADGES) ? std::min(h, std::max(18, cols[i].fontH + 6)) : h;
+            int rowY = y + (h - rowH) / 2;
+            DrawSingleColumnEntry(hdc, curX, rowY, cols[i].totalW, rowH, entries[i], cols[i], settings, lblColor, valColor, dark_mode);
+            curX += cols[i].totalW + colGap;
+        }
+    }
     else if (entries.size() == 2)
     {
         std::vector<const QuotaDisplayEntry*> colRows = { &entries[0], &entries[1] };
         ColumnLayoutMetrics m = ComputeColumnMetrics(hdc, colRows, settings);
-        if (h >= 24)
-        {
-            int halfH = h / 2;
-            DrawSingleColumnEntry(hdc, x, y, m.totalW, halfH, entries[0], m, settings, lblColor, valColor, dark_mode);
-            DrawSingleColumnEntry(hdc, x, y + halfH, m.totalW, h - halfH, entries[1], m, settings, lblColor, valColor, dark_mode);
-        }
-        else
-        {
-            std::vector<const QuotaDisplayEntry*> r0 = { &entries[0] };
-            std::vector<const QuotaDisplayEntry*> r1 = { &entries[1] };
-            ColumnLayoutMetrics m0 = ComputeColumnMetrics(hdc, r0, settings);
-            ColumnLayoutMetrics m1 = ComputeColumnMetrics(hdc, r1, settings);
-            DrawSingleColumnEntry(hdc, x, y, m0.totalW, h, entries[0], m0, settings, lblColor, valColor, dark_mode);
-            DrawSingleColumnEntry(hdc, x + m0.totalW + colGap, y, m1.totalW, h, entries[1], m1, settings, lblColor, valColor, dark_mode);
-        }
+        int halfH = h / 2;
+        DrawSingleColumnEntry(hdc, x, y, m.totalW, halfH, entries[0], m, settings, lblColor, valColor, dark_mode);
+        DrawSingleColumnEntry(hdc, x, y + halfH, m.totalW, h - halfH, entries[1], m, settings, lblColor, valColor, dark_mode);
     }
     else // 3 entries: Left column = entries[0] (top) + entries[1] (bottom), Right column = entries[2] (top)
     {
@@ -998,24 +1047,10 @@ void CPluginItem::DrawItem(void* hDC, int x, int y, int w, int h, bool dark_mode
         ColumnLayoutMetrics leftM = ComputeColumnMetrics(hdc, leftRows, settings);
         ColumnLayoutMetrics rightM = ComputeColumnMetrics(hdc, rightRows, settings);
 
-        if (h >= 24)
-        {
-            int halfH = h / 2;
-            DrawSingleColumnEntry(hdc, x, y, leftM.totalW, halfH, entries[0], leftM, settings, lblColor, valColor, dark_mode);
-            DrawSingleColumnEntry(hdc, x, y + halfH, leftM.totalW, h - halfH, entries[1], leftM, settings, lblColor, valColor, dark_mode);
-            DrawSingleColumnEntry(hdc, x + leftM.totalW + colGap, y, rightM.totalW, halfH, entries[2], rightM, settings, lblColor, valColor, dark_mode);
-        }
-        else
-        {
-            std::vector<const QuotaDisplayEntry*> r0 = { &entries[0] };
-            std::vector<const QuotaDisplayEntry*> r1 = { &entries[1] };
-            ColumnLayoutMetrics m0 = ComputeColumnMetrics(hdc, r0, settings);
-            ColumnLayoutMetrics m1 = ComputeColumnMetrics(hdc, r1, settings);
-            DrawSingleColumnEntry(hdc, x, y, m0.totalW, h, entries[0], m0, settings, lblColor, valColor, dark_mode);
-            int x1 = x + m0.totalW + colGap;
-            DrawSingleColumnEntry(hdc, x1, y, m1.totalW, h, entries[1], m1, settings, lblColor, valColor, dark_mode);
-            DrawSingleColumnEntry(hdc, x1 + m1.totalW + colGap, y, rightM.totalW, h, entries[2], rightM, settings, lblColor, valColor, dark_mode);
-        }
+        int halfH = h / 2;
+        DrawSingleColumnEntry(hdc, x, y, leftM.totalW, halfH, entries[0], leftM, settings, lblColor, valColor, dark_mode);
+        DrawSingleColumnEntry(hdc, x, y + halfH, leftM.totalW, h - halfH, entries[1], leftM, settings, lblColor, valColor, dark_mode);
+        DrawSingleColumnEntry(hdc, x + leftM.totalW + colGap, y, rightM.totalW, halfH, entries[2], rightM, settings, lblColor, valColor, dark_mode);
     }
 
     SetTextColor(hdc, prevColor);

@@ -304,6 +304,48 @@ int main()
         std::cout << "Host Display Text Settings verbatim label tests (all 5 Visual Styles) passed!" << std::endl;
     }
 
+    // 15d. Single-row paired taskbar slot (h < minDoubleRowH) reports full side-by-side width when HideWeeklyQuota=false
+    {
+        s.displayStyle = STYLE_PROGRESS_BAR;
+        s.smartMode = true;
+        s.hideWeeklyQuota = false;
+        s.hideResetTime = false;
+        s.shortResetTime = true;
+        s.hideLabels = false;
+        plugin.ApplySettings(s);
+        plugin.ParseAndUpdate(MakeJson(0.42, 1.0, 1.0), false);
+
+        // Two-row stacked height (h = 40) -> compact 1-column width
+        SetTextColor(hdcMem, RGB(255, 255, 255));
+        item0->DrawItem(hdcMem, 0, 0, 200, 40, true);
+        int stackedW = item0->GetItemWidthEx(hdcMem);
+
+        // Single-row paired height (h = 20, e.g. paired beneath another item in TrafficMonitor) -> side-by-side width
+        item0->DrawItem(hdcMem, 0, 0, 200, 20, true);
+        int sideBySideW = item0->GetItemWidthEx(hdcMem);
+        assert(sideBySideW > stackedW + 40);
+
+        // Render side-by-side into allocated sideBySideW and verify 'Wk' column pixels are actually drawn past stackedW
+        RECT clearRc = { 0, 0, 400, 30 };
+        FillRect(hdcMem, &clearRc, (HBRUSH)GetStockObject(BLACK_BRUSH));
+        item0->DrawItem(hdcMem, 0, 0, sideBySideW, 20, true);
+        bool drewRightHalf = false;
+        for (int px = stackedW + 4; px < sideBySideW - 4 && !drewRightHalf; ++px)
+        {
+            for (int py = 0; py < 20; ++py)
+            {
+                if (GetPixel(hdcMem, px, py) != RGB(0, 0, 0)) { drewRightHalf = true; break; }
+            }
+        }
+        assert(drewRightHalf);
+
+        // Restore stacked height state
+        item0->DrawItem(hdcMem, 0, 0, stackedW, 40, true);
+        assert(item0->GetItemWidthEx(hdcMem) == stackedW);
+        std::cout << "Single-line side-by-side weekly quota width tests passed (stacked="
+                  << stackedW << "px, singleRow=" << sideBySideW << "px)!" << std::endl;
+    }
+
     SelectObject(hdcMem, hOldFont);
     DeleteObject(hFont);
     SelectObject(hdcMem, hOldBmp);
