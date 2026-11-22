@@ -170,11 +170,11 @@ static COLORREF ComputeSecondaryColor(COLORREF baseColor, bool darkMode, bool in
 
     if (textIsDark)
     {
-        // For dark text (e.g. black RGB(0,0,0)), dimming means lightening towards a medium tone
-        // that remains clearly legible against a light background or light pill container.
-        BYTE dr = static_cast<BYTE>(r + (255 - r) * 0.40f + 0.5f);
-        BYTE dg = static_cast<BYTE>(g + (255 - g) * 0.40f + 0.5f);
-        BYTE db = static_cast<BYTE>(b + (255 - b) * 0.40f + 0.5f);
+        // For dark text (e.g. black RGB(0,0,0)), dimming means lightening towards a crisp
+        // dark-charcoal tone (~65% contrast) that remains sharp on translucent backgrounds/pills.
+        BYTE dr = static_cast<BYTE>(r + (255 - r) * 0.30f + 0.5f);
+        BYTE dg = static_cast<BYTE>(g + (255 - g) * 0.30f + 0.5f);
+        BYTE db = static_cast<BYTE>(b + (255 - b) * 0.30f + 0.5f);
         return RGB(dr, dg, db);
     }
     else
@@ -318,7 +318,10 @@ static void DrawTextPremultiplied(HDC hdc, const wchar_t* text, int len, LPRECT 
     bf.BlendFlags = 0;
     bf.SourceConstantAlpha = 255;
     bf.AlphaFormat = AC_SRC_ALPHA;
-    AlphaBlend(hdc, lprc->left, lprc->top, w, h, memDC, 0, 0, w, h, bf);
+    if (!AlphaBlend(hdc, lprc->left, lprc->top, w, h, memDC, 0, 0, w, h, bf))
+    {
+        DrawTextW(hdc, text, len, lprc, format);
+    }
 
     if (hOldFont) SelectObject(memDC, hOldFont);
     SelectObject(memDC, hOldBmp);
@@ -550,7 +553,6 @@ static void DrawSingleColumnEntry(HDC hdc, int rx, int ry, int rw, int rh,
     bool insidePill = (style == STYLE_PILL_BADGES);
 
     COLORREF secColor = ComputeSecondaryColor(valueColor, darkMode, insidePill, settings.dimSecondaryInfo);
-    COLORREF pillResetColor = insidePill ? valueColor : secColor;
     COLORREF lblColor = labelColor;
     COLORREF threshColor = GetThresholdColor(e.percent, darkMode);
 
@@ -602,7 +604,7 @@ static void DrawSingleColumnEntry(HDC hdc, int rx, int ry, int rw, int rh,
                 Gdiplus::REAL r = m.clockW * 0.45f;
                 Gdiplus::REAL cx = clockStartX + m.clockW * 0.5f;
                 Gdiplus::REAL cy = ry + rh * 0.5f;
-                DrawClockIcon(g, cx, cy, r, pillResetColor);
+                DrawClockIcon(g, cx, cy, r, secColor);
             }
         }
         else if (style == STYLE_PROGRESS_BAR)
@@ -687,7 +689,7 @@ static void DrawSingleColumnEntry(HDC hdc, int rx, int ry, int rw, int rh,
         if (!rst.empty())
         {
             curX += pw + m.gapMed + m.clockW + m.clockGap;
-            DrawStyledText(hdc, curX, textY, rstw, textH, rst, pillResetColor, aligned ? DT_RIGHT : DT_LEFT, tab, m.digitSlotW);
+            DrawStyledText(hdc, curX, textY, rstw, textH, rst, secColor, aligned ? DT_RIGHT : DT_LEFT, tab, m.digitSlotW);
         }
     }
 }
