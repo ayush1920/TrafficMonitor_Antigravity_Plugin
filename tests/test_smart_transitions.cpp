@@ -277,13 +277,10 @@ int main()
             std::wstring hl1 = item0->GetItemLableText();
             std::wstring hl2 = item0->GetItemValueText();
             assert(hl1.find(L"G:") != std::wstring::npos);
-            if (st == STYLE_MINIMAL_DOTS)
+            assert(hl1.find(L"Cl 75%") != std::wstring::npos);
+            if (st != STYLE_MINIMAL_DOTS)
             {
-                assert(hl1.find(L"Cl 75%") != std::wstring::npos);
-            }
-            else
-            {
-                assert(hl2.find(L"Cl 75%") != std::wstring::npos);
+                assert(hl2.find(L"100%") != std::wstring::npos);
             }
         }
 
@@ -344,6 +341,39 @@ int main()
         assert(item0->GetItemWidthEx(hdcMem) == stackedW);
         std::cout << "Single-line side-by-side weekly quota width tests passed (stacked="
                   << stackedW << "px, singleRow=" << sideBySideW << "px)!" << std::endl;
+    }
+
+    // 15e. Standard Mode (smartMode=false) respects hideWeeklyQuota=false by showing Wk for G & C
+    {
+        s.displayStyle = STYLE_CLASSIC;
+        s.smartMode = false;
+        s.hideWeeklyQuota = false;
+        s.hideResetTime = true;
+        s.hideLabels = false;
+        plugin.ApplySettings(s);
+        plugin.ParseAndUpdate(MakeJson(0.85, 0.75, 0.90), false);
+
+        std::wstring sl1 = item0->GetItemLableText();
+        std::wstring sl2 = item0->GetItemValueText();
+        assert(sl1.find(L"G:85%") != std::wstring::npos);
+        assert(sl1.find(L"C:75%") != std::wstring::npos);
+        assert(sl1.find(L"A:90%") != std::wstring::npos);
+        assert(sl2.find(L"Wk:100%") != std::wstring::npos);
+        assert(sl2.find(L"Wk:100%", sl2.find(L"Wk:100%") + 1) != std::wstring::npos); // Both G Wk and C Wk
+
+        item0->DrawItem(hdcMem, 0, 0, 400, 40, true);
+        int wStdAll = item0->GetItemWidthEx(hdcMem);
+
+        s.hideWeeklyQuota = true;
+        plugin.ApplySettings(s);
+        std::wstring sl1NoWk = item0->GetItemLableText();
+        std::wstring sl2NoWk = item0->GetItemValueText();
+        assert(sl2NoWk.find(L"Wk") == std::wstring::npos);
+        assert(sl2NoWk.find(L"C:75%") != std::wstring::npos);
+        int wStdNoWk = item0->GetItemWidthEx(hdcMem);
+        assert(wStdAll > wStdNoWk);
+        std::cout << "Standard Mode weekly quota visibility tests (withWk=" << wStdAll
+                  << "px, noWk=" << wStdNoWk << "px) passed!" << std::endl;
     }
 
     SelectObject(hdcMem, hOldFont);

@@ -71,8 +71,8 @@ Combine **Visual Style + Smart Mode + Weekly (`Wk`) + Timers + Labels** into rea
 | **1. Minimal** | Tiny footprint & uncluttered taskbar | **Minimal Status Dots** + `Smart Mode: On` + `Hide model labels: On` + Host `Don't show '%': On` | Ultra-compact `● 82 \| ● 45` indicator; full details stay in tooltip |
 | **2. Clean** *(Daily Driver)* | Balanced single-model tracking | **Typographic Hierarchy** + `Smart Mode: On` + `Hide Wk: Off` + `Short form` timers + `Dim secondary: On` + `Align & Tabular: On` | Clean 2-line active readout (`G 82% · 4h` / `Wk 93% · 7d`) |
 | **3. Elegant** | Aesthetic Light/Dark glass taskbars | **Stacked Pill Badges** + `Smart Mode: On` + `Hide Wk: Off` + `Short form` + `Dim secondary: On` + `Align & Tabular: On` | Frosted translucent pills with aligned numbers and clock icons |
-| **4. GPT / Claude Power User** | Watching multiple AI quotas together | **Micro Progress Bars** + `Smart Mode: Off` + `Short form` + Host `Display Text`: `Gem:` / `GPT:` | Side-by-side color bars alerting yellow `<= 60%` & red `<= 20%` |
-| **5. Verbose** | Full telemetry without hovering | **Stacked Pill Badges** *(or Classic)* + `Smart Mode: Off` + `Long form (4h25m)` + `Dim secondary: Off` + Host `Display Text`: `G:` / `C:` | All models, exact minute timers, high-contrast labels & metrics |
+| **4. GPT / Claude Power User** | Watching multiple AI quotas together | **Micro Progress Bars** + `Smart Mode: Off` + `Hide Wk: On` + `Short form` + Host `Display Text`: `Gem:` / `GPT:` | Side-by-side color bars alerting yellow `<= 60%` & red `<= 20%` |
+| **5. Verbose** | Full telemetry without hovering | **Stacked Pill Badges** *(or Classic)* + `Smart Mode: Off` + `Hide Wk: Off` *(or `On` for 5h-only)* + `Long form (4h25m)` + `Dim secondary: Off` + Host `Display Text`: `G:` / `C:` | All models (with optional `Wk` rows), exact minute timers, high contrast |
 | **6. Capacity Focus** | Percentage & bar health only | **Micro Progress Bars** + `Smart Mode: On` + `Hide Weekly Quota (Wk): On` + `Hide Reset Time: On` | Single vertically centered health bar (`G: ▆▆▆░░ 52%`) |
 
 ---
@@ -89,7 +89,7 @@ Pairing **Smart Mode** with **Hide Weekly Quota (`Wk`)** controls how many items
 - **Smart Mode On + Show `Wk`**: Displays the currently draining 5-hour quota on Row 1 and its weekly (`Wk`) limit on Row 2 (`Typographic`, `Progress Bar`, or `Pill Badges`).
 - **Smart Mode On + Hide `Wk`**: Drops the `Wk` row and **vertically centers** the single active quota cleanly in the taskbar slot.
 - **Concurrent Multi-Model Drop**: When two or more models decrease in the same poll interval, Smart Mode automatically expands to track all dropping models simultaneously, then falls back cleanly when idle.
-- **Smart Mode Off (Standard)**: Pins Gemini, Claude, and Argon together (`2+1` layout) regardless of activity.
+- **Smart Mode Off (Standard)**: Pins Gemini, Claude, and Argon together — paired with each model's `Wk` row when **Hide Weekly Quota** is unchecked (`(G / Wk) | (C / Wk) | A`), or compact `(G / C) | A` when **Hide Weekly Quota** is checked.
 
 ### Reset Timers, Model Labels & Host Controls
 Mixing timer formatting, visual dimming, custom host text, and label removal lets you dial in exact information density:

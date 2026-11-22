@@ -820,9 +820,8 @@ static int ComputeSideBySideMetrics(HDC hdc, const std::vector<QuotaDisplayEntry
                                     std::vector<ColumnLayoutMetrics>& outCols)
 {
     outCols.clear();
-    size_t count = std::min<size_t>(entries.size(), 3);
     int totalW = 0;
-    for (size_t i = 0; i < count; ++i)
+    for (size_t i = 0; i < entries.size(); ++i)
     {
         std::vector<const QuotaDisplayEntry*> singleRow = { &entries[i] };
         ColumnLayoutMetrics cm = ComputeColumnMetrics(hdc, singleRow, settings);
@@ -881,20 +880,25 @@ int CPluginItem::GetItemWidthEx(void* hDC) const
         return ComputeSideBySideMetrics(hdc, entries, settings, colGap, cols) + 4;
     }
 
-    if (entries.size() == 1 || entries.size() == 2)
+    if (entries.size() == 1)
     {
-        std::vector<const QuotaDisplayEntry*> colRows;
-        for (const auto& e : entries) colRows.push_back(&e);
+        std::vector<const QuotaDisplayEntry*> colRows = { &entries[0] };
         ColumnLayoutMetrics col = ComputeColumnMetrics(hdc, colRows, settings);
         return col.totalW + 4;
     }
 
-    // 3 entries (2+1 layout: Left col = entries[0] & entries[1], Right col = entries[2])
-    std::vector<const QuotaDisplayEntry*> leftRows = { &entries[0], &entries[1] };
-    std::vector<const QuotaDisplayEntry*> rightRows = { &entries[2] };
-    ColumnLayoutMetrics leftM = ComputeColumnMetrics(hdc, leftRows, settings);
-    ColumnLayoutMetrics rightM = ComputeColumnMetrics(hdc, rightRows, settings);
-    return leftM.totalW + colGap + rightM.totalW + 4;
+    // General 2-row column grid: col c holds entries[2*c] (top) and optional entries[2*c + 1] (bottom)
+    int totalW = 0;
+    size_t numCols = (entries.size() + 1) / 2;
+    for (size_t c = 0; c < numCols; ++c)
+    {
+        std::vector<const QuotaDisplayEntry*> colRows = { &entries[c * 2] };
+        if (c * 2 + 1 < entries.size()) colRows.push_back(&entries[c * 2 + 1]);
+        ColumnLayoutMetrics col = ComputeColumnMetrics(hdc, colRows, settings);
+        if (c > 0) totalW += colGap;
+        totalW += col.totalW;
+    }
+    return totalW + 4;
 }
 
 void CPluginItem::DrawItem(void* hDC, int x, int y, int w, int h, bool dark_mode)
@@ -1032,25 +1036,24 @@ void CPluginItem::DrawItem(void* hDC, int x, int y, int w, int h, bool dark_mode
             curX += cols[i].totalW + colGap;
         }
     }
-    else if (entries.size() == 2)
+    else
     {
-        std::vector<const QuotaDisplayEntry*> colRows = { &entries[0], &entries[1] };
-        ColumnLayoutMetrics m = ComputeColumnMetrics(hdc, colRows, settings);
+        // General 2-row column grid: col c holds entries[2*c] (top) and optional entries[2*c + 1] (bottom)
         int halfH = h / 2;
-        DrawSingleColumnEntry(hdc, x, y, m.totalW, halfH, entries[0], m, settings, lblColor, valColor, dark_mode);
-        DrawSingleColumnEntry(hdc, x, y + halfH, m.totalW, h - halfH, entries[1], m, settings, lblColor, valColor, dark_mode);
-    }
-    else // 3 entries: Left column = entries[0] (top) + entries[1] (bottom), Right column = entries[2] (top)
-    {
-        std::vector<const QuotaDisplayEntry*> leftRows = { &entries[0], &entries[1] };
-        std::vector<const QuotaDisplayEntry*> rightRows = { &entries[2] };
-        ColumnLayoutMetrics leftM = ComputeColumnMetrics(hdc, leftRows, settings);
-        ColumnLayoutMetrics rightM = ComputeColumnMetrics(hdc, rightRows, settings);
-
-        int halfH = h / 2;
-        DrawSingleColumnEntry(hdc, x, y, leftM.totalW, halfH, entries[0], leftM, settings, lblColor, valColor, dark_mode);
-        DrawSingleColumnEntry(hdc, x, y + halfH, leftM.totalW, h - halfH, entries[1], leftM, settings, lblColor, valColor, dark_mode);
-        DrawSingleColumnEntry(hdc, x + leftM.totalW + colGap, y, rightM.totalW, halfH, entries[2], rightM, settings, lblColor, valColor, dark_mode);
+        int curX = x;
+        size_t numCols = (entries.size() + 1) / 2;
+        for (size_t c = 0; c < numCols; ++c)
+        {
+            std::vector<const QuotaDisplayEntry*> colRows = { &entries[c * 2] };
+            if (c * 2 + 1 < entries.size()) colRows.push_back(&entries[c * 2 + 1]);
+            ColumnLayoutMetrics col = ComputeColumnMetrics(hdc, colRows, settings);
+            DrawSingleColumnEntry(hdc, curX, y, col.totalW, halfH, entries[c * 2], col, settings, lblColor, valColor, dark_mode);
+            if (c * 2 + 1 < entries.size())
+            {
+                DrawSingleColumnEntry(hdc, curX, y + halfH, col.totalW, h - halfH, entries[c * 2 + 1], col, settings, lblColor, valColor, dark_mode);
+            }
+            curX += col.totalW + colGap;
+        }
     }
 
     SetTextColor(hdc, prevColor);
@@ -1538,7 +1541,7 @@ static LRESULT CALLBACK OptionsDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
         SendMessageW(hSmart, BM_SETCHECK, s.smartMode ? BST_CHECKED : BST_UNCHECKED, 0);
 
         HWND hHideWk = AddDlgButton(hWnd, hi, ctx->hFont, IDC_CHK_HIDE_WEEKLY,
-                                    L"Hide Weekly Quota  (Omit 'Wk' row when showing single model)",
+                                    L"Hide Weekly Quota  (Omit 'Wk' weekly quotas across models)",
                                     BS_AUTOCHECKBOX | WS_TABSTOP, 16, 36, 424, 22);
         SendMessageW(hHideWk, BM_SETCHECK, s.hideWeeklyQuota ? BST_CHECKED : BST_UNCHECKED, 0);
 
@@ -1947,9 +1950,11 @@ void CAntigravityPlugin::ParseAndUpdate(const std::string& jsonStr, bool updateS
 
         if (!m_settings.smartMode)
         {
-            // Standard Mode: Gemini, Claude, and Argon (if active)
+            // Standard Mode: show Gemini, Claude, and Argon (if active), paired with weekly quotas unless hidden
             entries.push_back(eG);
+            if (!m_settings.hideWeeklyQuota) entries.push_back(eGWk);
             entries.push_back(eC);
+            if (!m_settings.hideWeeklyQuota) entries.push_back(eCWk);
             if (hasArgon)
             {
                 entries.push_back(eA);
@@ -2087,15 +2092,19 @@ void CAntigravityPlugin::ParseAndUpdate(const std::string& jsonStr, bool updateS
             if (m_settings.displayStyle == STYLE_CLASSIC && hasArgon && m_settings.smartMode && m_lastShowA && !m_lastShowG && !m_lastShowC && !m_settings.hideWeeklyQuota)
                 line2 = L"Argon Weekly";
         }
-        else if (entries.size() == 2)
+        else
         {
-            line1 = fmtEntry(entries[0]);
-            line2 = fmtEntry(entries[1]);
-        }
-        else if (entries.size() >= 3)
-        {
-            line1 = fmtEntry(entries[0]) + L"  " + fmtEntry(entries[2]);
-            line2 = fmtEntry(entries[1]);
+            size_t numCols = (entries.size() + 1) / 2;
+            for (size_t c = 0; c < numCols; ++c)
+            {
+                if (!line1.empty()) line1 += L"  ";
+                line1 += fmtEntry(entries[c * 2]);
+                if (c * 2 + 1 < entries.size())
+                {
+                    if (!line2.empty()) line2 += L"  ";
+                    line2 += fmtEntry(entries[c * 2 + 1]);
+                }
+            }
         }
 
         // Update structured custom-draw state & text fallbacks for Item 0
