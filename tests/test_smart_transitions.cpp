@@ -548,10 +548,34 @@ int main()
         assert(std::wstring(claude->GetItemValueText()).empty());
         int wGeminiCompact = gemini->GetItemWidthEx(hdc);
         assert(wGeminiCompact < wGemini);
+
+        // Verify Smart Mode hides inactive split items (width=0, empty strings, not double-line exclusive)
+        std::string jsonClaudeDrop =
+            "[{\"Label\":\"Test\",\"Email\":\"test@example.com\",\"IsActive\":true,"
+            "\"GFiveH\":0.31,\"GWeekly\":0.80,\"GFiveHReset\":\"3h 35m\",\"GWeeklyReset\":\"6d 23h\","
+            "\"CFiveH\":0.85,\"CWeekly\":1.0,\"CFiveHReset\":\"4h 50m\",\"CWeeklyReset\":\"7d 0h\","
+            "\"HasArgon\":true,\"AWeekly\":1.0,\"AWeeklyReset\":\"6d 23h\"}]";
+        // Simulate Claude dropping while still in Standard Mode, then toggling Smart Mode ON
+        splitPlugin.ParseAndUpdate(jsonClaudeDrop);
+        splitSettings.smartMode = true;
+        splitPlugin.ApplySettings(splitSettings);
+
+        assert(std::wstring(gemini->GetItemLableText()).empty());
+        assert(std::wstring(gemini->GetItemValueText()).empty());
+        assert(gemini->GetItemWidthEx(hdc) == 0);
+        assert(gemini->IsDoubleLineExclusive() == 0);
+
+        assert(std::wstring(argon->GetItemLableText()).empty());
+        assert(std::wstring(argon->GetItemValueText()).empty());
+        assert(argon->GetItemWidthEx(hdc) == 0);
+        assert(argon->IsDoubleLineExclusive() == 0);
+
+        assert(std::wstring(claude->GetItemLableText()).find(L"C") != std::wstring::npos);
+        assert(claude->GetItemWidthEx(hdc) > 0);
         DeleteDC(hdc);
 
         splitPlugin.ApplySettings(origSplitSettings);
-        std::cout << "Per-model CustomDraw split items (Gemini/Claude/Argon) test passed!" << std::endl;
+        std::cout << "Per-model CustomDraw split items (Gemini/Claude/Argon + Smart Mode hiding) test passed!" << std::endl;
     }
 
     std::cout << "\nALL 18 STYLE, POLISH, TRANSITION, PERCENT AND QUOTASYNC TESTS PASSED PERFECTLY!" << std::endl;

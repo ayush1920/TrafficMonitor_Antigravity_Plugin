@@ -851,7 +851,12 @@ int CPluginItem::IsDoubleLineExclusive() const
     if (!m_isCustomDraw) return 0;
     std::lock_guard<std::mutex> lock(m_renderMutex);
     if (m_renderSettings.displayStyle == STYLE_MINIMAL_DOTS) return 0;
-    if (m_renderEntries.empty()) return 1;
+    if (m_renderEntries.empty())
+    {
+        const wchar_t* l1 = m_labelBuffers[m_activeLabelBuf.load(std::memory_order_relaxed)];
+        const wchar_t* l2 = m_buffers[m_activeBuf.load(std::memory_order_relaxed)];
+        return (l1[0] == L'\0' && l2[0] == L'\0') ? 0 : 1;
+    }
     return (m_renderEntries.size() >= 2) ? 1 : 0;
 }
 
@@ -875,6 +880,7 @@ int CPluginItem::GetItemWidthEx(void* hDC) const
     {
         const wchar_t* l1 = m_labelBuffers[m_activeLabelBuf.load(std::memory_order_relaxed)];
         const wchar_t* l2 = m_buffers[m_activeBuf.load(std::memory_order_relaxed)];
+        if (l1[0] == L'\0' && l2[0] == L'\0') return 0;
         if (!canStack)
         {
             std::wstring combined = std::wstring(l1) + L" " + std::wstring(l2);
@@ -955,6 +961,12 @@ void CPluginItem::DrawItem(void* hDC, int x, int y, int w, int h, bool dark_mode
     {
         const wchar_t* l1 = m_labelBuffers[m_activeLabelBuf.load(std::memory_order_relaxed)];
         const wchar_t* l2 = m_buffers[m_activeBuf.load(std::memory_order_relaxed)];
+        if (l1[0] == L'\0' && l2[0] == L'\0')
+        {
+            SetTextColor(hdc, prevColor);
+            SetBkMode(hdc, prevBkMode);
+            return;
+        }
         if (canStack)
         {
             int halfH = h / 2;
@@ -1975,6 +1987,63 @@ void CAntigravityPlugin::ParseAndUpdate(const std::string& jsonStr, bool updateS
         QuotaDisplayEntry eCWk{ lblWk, cWeeklyPct, std::to_wstring(cWeeklyPct) + pctSuffix, cWeeklyResetFmt, true, false };
 
         std::vector<QuotaDisplayEntry> entries;
+        bool showG = true;
+        bool showC = true;
+        bool showA = hasArgon;
+
+        // Always update Smart Mode drop state on fresh snapshots so toggling Smart Mode mid-session uses accurate activity
+        if (updateSmartState)
+        {
+            bool sShowG = false;
+            bool sShowC = false;
+            bool sShowA = false;
+            bool gDrop = false;
+            bool cDrop = false;
+            bool aDrop = false;
+
+            if (m_hasInitialSnapshot && email == m_prevAccountEmail)
+            {
+                if (m_prevQuota.g5h >= 0.0 && g5h < m_prevQuota.g5h - 0.0001) gDrop = true;
+                if (m_prevQuota.c5h >= 0.0 && c5h < m_prevQuota.c5h - 0.0001) cDrop = true;
+                if (hasArgon && m_prevQuota.aWeekly >= 0.0 && aWeekly < m_prevQuota.aWeekly - 0.0001) aDrop = true;
+            }
+
+            int dropCount = (gDrop ? 1 : 0) + (cDrop ? 1 : 0) + (aDrop ? 1 : 0);
+
+            if (dropCount == 1)
+            {
+                if (gDrop) { sShowG = true; m_lastSingleDroppingModel = MODEL_GEMINI; }
+                else if (cDrop) { sShowC = true; m_lastSingleDroppingModel = MODEL_CLAUDE; }
+                else if (aDrop) { sShowA = true; m_lastSingleDroppingModel = MODEL_ARGON; }
+                m_lastDroppingCount = 1;
+            }
+            else if (dropCount > 1)
+            {
+                sShowG = gDrop;
+                sShowC = cDrop;
+                sShowA = aDrop;
+                m_lastDroppingCount = dropCount;
+            }
+            else // dropCount == 0
+            {
+                if (m_lastDroppingCount == 1)
+                {
+                    if (m_lastSingleDroppingModel == MODEL_GEMINI) sShowG = true;
+                    else if (m_lastSingleDroppingModel == MODEL_CLAUDE) sShowC = true;
+                    else if (m_lastSingleDroppingModel == MODEL_ARGON && hasArgon) sShowA = true;
+                    else sShowG = true;
+                }
+                else
+                {
+                    sShowG = true;
+                    m_lastDroppingCount = 0;
+                }
+            }
+
+            m_lastShowG = sShowG;
+            m_lastShowC = sShowC;
+            m_lastShowA = sShowA;
+        }
 
         if (!m_settings.smartMode)
         {
@@ -1991,66 +2060,10 @@ void CAntigravityPlugin::ParseAndUpdate(const std::string& jsonStr, bool updateS
         else
         {
             // Smart Mode (Option C): Dynamic Quota Tracking
-            bool showG = false;
-            bool showC = false;
-            bool showA = false;
-
-            if (updateSmartState)
-            {
-                bool gDrop = false;
-                bool cDrop = false;
-                bool aDrop = false;
-
-                if (m_hasInitialSnapshot && email == m_prevAccountEmail)
-                {
-                    if (m_prevQuota.g5h >= 0.0 && g5h < m_prevQuota.g5h - 0.0001) gDrop = true;
-                    if (m_prevQuota.c5h >= 0.0 && c5h < m_prevQuota.c5h - 0.0001) cDrop = true;
-                    if (hasArgon && m_prevQuota.aWeekly >= 0.0 && aWeekly < m_prevQuota.aWeekly - 0.0001) aDrop = true;
-                }
-
-                int dropCount = (gDrop ? 1 : 0) + (cDrop ? 1 : 0) + (aDrop ? 1 : 0);
-
-                if (dropCount == 1)
-                {
-                    if (gDrop) { showG = true; m_lastSingleDroppingModel = MODEL_GEMINI; }
-                    else if (cDrop) { showC = true; m_lastSingleDroppingModel = MODEL_CLAUDE; }
-                    else if (aDrop) { showA = true; m_lastSingleDroppingModel = MODEL_ARGON; }
-                    m_lastDroppingCount = 1;
-                }
-                else if (dropCount > 1)
-                {
-                    showG = gDrop;
-                    showC = cDrop;
-                    showA = aDrop;
-                    m_lastDroppingCount = dropCount;
-                }
-                else // dropCount == 0
-                {
-                    if (m_lastDroppingCount == 1)
-                    {
-                        if (m_lastSingleDroppingModel == MODEL_GEMINI) showG = true;
-                        else if (m_lastSingleDroppingModel == MODEL_CLAUDE) showC = true;
-                        else if (m_lastSingleDroppingModel == MODEL_ARGON && hasArgon) showA = true;
-                        else showG = true;
-                    }
-                    else
-                    {
-                        showG = true;
-                        m_lastDroppingCount = 0;
-                    }
-                }
-
-                m_lastShowG = showG;
-                m_lastShowC = showC;
-                m_lastShowA = showA;
-            }
-            else
-            {
-                showG = m_lastShowG;
-                showC = m_lastShowC;
-                showA = m_lastShowA && hasArgon;
-                if (!showG && !showC && !showA) showG = true;
-            }
+            showG = m_lastShowG;
+            showC = m_lastShowC;
+            showA = m_lastShowA && hasArgon;
+            if (!showG && !showC && !showA) showG = true;
 
             int activeCount = (showG ? 1 : 0) + (showC ? 1 : 0) + (showA ? 1 : 0);
             if (activeCount == 1)
@@ -2143,19 +2156,35 @@ void CAntigravityPlugin::ParseAndUpdate(const std::string& jsonStr, bool updateS
         // Item 0: Combined Antigravity Quota
         updateCustomItem(m_itemCombined, entries, true);
 
-        // Item 1: Split Gemini item (5h + optional Wk)
-        std::vector<QuotaDisplayEntry> geminiEntries = { eG };
-        if (!m_settings.hideWeeklyQuota) geminiEntries.push_back(eGWk);
+        // Item 1: Split Gemini item (5h + optional Wk, hidden when inactive in Smart Mode)
+        std::vector<QuotaDisplayEntry> geminiEntries;
+        if (!m_settings.smartMode || showG)
+        {
+            geminiEntries.push_back(eG);
+            if (!m_settings.hideWeeklyQuota) geminiEntries.push_back(eGWk);
+        }
         updateCustomItem(m_itemGemini, geminiEntries, false);
 
-        // Item 2: Split Claude item (5h + optional Wk)
-        std::vector<QuotaDisplayEntry> claudeEntries = { eC };
-        if (!m_settings.hideWeeklyQuota) claudeEntries.push_back(eCWk);
+        // Item 2: Split Claude item (5h + optional Wk, hidden when inactive in Smart Mode)
+        std::vector<QuotaDisplayEntry> claudeEntries;
+        if (!m_settings.smartMode || showC)
+        {
+            claudeEntries.push_back(eC);
+            if (!m_settings.hideWeeklyQuota) claudeEntries.push_back(eCWk);
+        }
         updateCustomItem(m_itemClaude, claudeEntries, false);
 
-        // Item 4: Split Argon item
-        QuotaDisplayEntry eAItem = hasArgon ? eA : QuotaDisplayEntry{ lblA, 0, L"--", L"", false, aFromHost };
-        updateCustomItem(m_itemArgon, { eAItem }, false);
+        // Item 4: Split Argon item (hidden when inactive in Smart Mode)
+        std::vector<QuotaDisplayEntry> argonEntries;
+        if (!m_settings.smartMode)
+        {
+            argonEntries.push_back(hasArgon ? eA : QuotaDisplayEntry{ lblA, 0, L"--", L"", false, aFromHost });
+        }
+        else if (showA && hasArgon)
+        {
+            argonEntries.push_back(eA);
+        }
+        updateCustomItem(m_itemArgon, argonEntries, false);
 
         // Item 3: Account
         std::wstring wLabel = Utf8ToWide(label);
