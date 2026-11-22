@@ -23,8 +23,8 @@ There are three ways to customize the Antigravity plugin inside TrafficMonitor:
 2. **Full Options Dialog (All Visual Styles & Polish Flags)**  
    Right-click TrafficMonitor → **Plug-in Manage...** → select **Antigravity Quota** → click **Options...**. Use **Apply** to preview layout changes live on your taskbar.
 3. **TrafficMonitor Host Controls**  
-   - **Choose Items**: Right-click → **Display Settings...** → check **Antigravity Quota** *(or add `Antigravity Gemini`, `Antigravity Claude`, or `Antigravity Account` individually)*.
-   - **Custom Labels**: **Options...** → **Taskbar Window Settings** → **Display Text Settings...** → edit `Antigravity Gemini` / `Antigravity Claude`.
+   - **Choose Items**: Right-click → **Display Settings...** → check **Antigravity Quota** *(combined view)*, or uncheck it and enable **`Antigravity Gemini`**, **`Antigravity Claude`**, and **`Antigravity Argon`** individually to split models across TrafficMonitor's own taskbar columns/rows *(recommended if TrafficMonitor v1.8.6 pairs **Antigravity Quota** beneath another sensor like CPU Temp on a single line)*. You can also enable **`Antigravity Account`**.
+   - **Custom Labels**: **Options...** → **Taskbar Window Settings** → **Display Text Settings...** → edit `Antigravity Gemini`, `Antigravity Claude`, or `Antigravity Argon`.
    - **Percent Symbol**: **Options...** → **Taskbar Window Settings** → **Don't show '%'**.
 
 <p align="center">
@@ -47,7 +47,7 @@ There are three ways to customize the Antigravity plugin inside TrafficMonitor:
 </p>
 
 > [!NOTE]
-> Multi-entry layouts (all styles except *Minimal Status Dots*) advertise `IsDoubleLineExclusive()` via TrafficMonitor API v8, reserving a full **2-row column** so paired taskbar items (like CPU Temperature) do not compress multiple models onto a single cramped line. Single-entry centered views and *Minimal Status Dots* stay 1-row friendly.
+> Multi-entry layouts (all styles except *Minimal Status Dots*) advertise `IsDoubleLineExclusive()` via TrafficMonitor API v8, reserving a full **2-row column** on newer TrafficMonitor builds so paired taskbar items (like CPU Temperature) do not compress multiple models onto a single cramped line. On TrafficMonitor **v1.8.6** (prior to `IsDoubleLineExclusive`), or when you want compact multi-column stacking next to existing sensors, disable **Antigravity Quota** and enable **`Antigravity Gemini`**, **`Antigravity Claude`**, and **`Antigravity Argon`** individually in **Display Settings...** — all three support full CustomDraw Visual Styles and stack cleanly across TrafficMonitor's 2-row taskbar grid. Single-entry centered views and *Minimal Status Dots* stay 1-row friendly.
 
 ---
 

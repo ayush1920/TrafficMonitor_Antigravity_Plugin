@@ -50,7 +50,7 @@ Requires **[TrafficMonitor](https://github.com/zhongyang219/TrafficMonitor)** (A
    └── TrafficMonitor.exe
    ```
 3. Restart **TrafficMonitor**.
-4. Right-click TrafficMonitor → **Display Settings...** and enable **Antigravity Quota** on the Taskbar.
+4. Right-click TrafficMonitor → **Display Settings...** and enable **Antigravity Quota** on the Taskbar *(or split models across **`Antigravity Gemini`**, **`Antigravity Claude`**, and **`Antigravity Argon`** if you want multi-row stacking alongside existing sensors on TrafficMonitor v1.8.6)*.
 
 ---
 

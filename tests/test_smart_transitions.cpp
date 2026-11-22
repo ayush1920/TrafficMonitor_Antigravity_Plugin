@@ -480,6 +480,69 @@ int main()
         std::cout << "Short reset time truncation tests (3h 35m->3h, 2h 40m->2h, 0h 50m->50m, 6d 23h->6d) passed!" << std::endl;
     }
 
-    std::cout << "\nALL 16 STYLE, POLISH, TRANSITION, PERCENT AND QUOTASYNC TESTS PASSED PERFECTLY!" << std::endl;
+    // 18. Test per-model CustomDraw split items (Gemini, Claude, Argon) for multi-row taskbar layouts
+    {
+        CAntigravityPlugin splitPlugin;
+        PluginSettings origSplitSettings = splitPlugin.GetSettings();
+        PluginSettings splitSettings = origSplitSettings;
+        splitSettings.smartMode = false;
+        splitSettings.hideWeeklyQuota = false;
+        splitSettings.hideResetTime = false;
+        splitSettings.shortResetTime = true;
+        splitSettings.displayStyle = STYLE_PILL_BADGES;
+        splitSettings.hideLabels = false;
+        splitPlugin.ApplySettings(splitSettings);
+
+        IPluginItem* combined = splitPlugin.GetItem(0);
+        IPluginItem* gemini = splitPlugin.GetItem(1);
+        IPluginItem* claude = splitPlugin.GetItem(2);
+        IPluginItem* argon = splitPlugin.GetItem(4);
+        assert(combined && gemini && claude && argon);
+        assert(gemini->IsCustomDraw() == 1);
+        assert(claude->IsCustomDraw() == 1);
+        assert(argon->IsCustomDraw() == 1);
+        assert(std::wstring(gemini->GetItemId()) == L"antigravity_gemini");
+        assert(std::wstring(claude->GetItemId()) == L"antigravity_claude");
+        assert(std::wstring(argon->GetItemId()) == L"antigravity_argon");
+
+        std::string json =
+            "[{\"Label\":\"Test\",\"Email\":\"test@example.com\",\"IsActive\":true,"
+            "\"GFiveH\":0.31,\"GWeekly\":0.80,\"GFiveHReset\":\"3h 35m\",\"GWeeklyReset\":\"6d 23h\","
+            "\"CFiveH\":1.0,\"CWeekly\":1.0,\"CFiveHReset\":\"5h 0m\",\"CWeeklyReset\":\"7d 0h\","
+            "\"HasArgon\":true,\"AWeekly\":1.0,\"AWeeklyReset\":\"6d 23h\"}]";
+        splitPlugin.ParseAndUpdate(json);
+
+        assert(std::wstring(gemini->GetItemLableText()).find(L"G") != std::wstring::npos);
+        assert(std::wstring(gemini->GetItemValueText()).find(L"Wk") != std::wstring::npos);
+        assert(std::wstring(claude->GetItemLableText()).find(L"C") != std::wstring::npos);
+        assert(std::wstring(claude->GetItemValueText()).find(L"Wk") != std::wstring::npos);
+        assert(std::wstring(argon->GetItemLableText()).find(L"A") != std::wstring::npos);
+
+        // Create compatible screen DC to measure single-row widths
+        HDC hdc = CreateCompatibleDC(nullptr);
+        int wCombined = combined->GetItemWidthEx(hdc);
+        int wGemini = gemini->GetItemWidthEx(hdc);
+        int wClaude = claude->GetItemWidthEx(hdc);
+        int wArgon = argon->GetItemWidthEx(hdc);
+        assert(wCombined > 0 && wGemini > 0 && wClaude > 0 && wArgon > 0);
+        assert(wGemini < wCombined);
+        assert(wClaude < wCombined);
+        assert(wArgon < wCombined);
+
+        // Verify hideWeeklyQuota = true removes Wk from per-model split items too
+        splitSettings.hideWeeklyQuota = true;
+        splitPlugin.ApplySettings(splitSettings);
+        splitPlugin.ParseAndUpdate(json);
+        assert(std::wstring(gemini->GetItemValueText()).empty());
+        assert(std::wstring(claude->GetItemValueText()).empty());
+        int wGeminiCompact = gemini->GetItemWidthEx(hdc);
+        assert(wGeminiCompact < wGemini);
+        DeleteDC(hdc);
+
+        splitPlugin.ApplySettings(origSplitSettings);
+        std::cout << "Per-model CustomDraw split items (Gemini/Claude/Argon) test passed!" << std::endl;
+    }
+
+    std::cout << "\nALL 18 STYLE, POLISH, TRANSITION, PERCENT AND QUOTASYNC TESTS PASSED PERFECTLY!" << std::endl;
     return 0;
 }

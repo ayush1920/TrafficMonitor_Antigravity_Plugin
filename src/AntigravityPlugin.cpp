@@ -1064,9 +1064,10 @@ void CPluginItem::DrawItem(void* hDC, int x, int y, int w, int h, bool dark_mode
 
 CAntigravityPlugin::CAntigravityPlugin()
     : m_itemCombined(L"antigravity_quota", L"Antigravity Quota", L"G:100% A:100%", L"G:100% (4h59m) A:100% (6d23h)", true),
-      m_itemGemini(L"antigravity_gemini", L"Antigravity Gemini", L"G:", L"100% (4h59m)", false),
-      m_itemClaude(L"antigravity_claude", L"Antigravity Claude", L"C:", L"100% (4h59m)", false),
-      m_itemAccount(L"antigravity_account", L"Antigravity Account", L"Acc:", L"AccountName", false)
+      m_itemGemini(L"antigravity_gemini", L"Antigravity Gemini", L"G:", L"G:100% (4h59m)", true),
+      m_itemClaude(L"antigravity_claude", L"Antigravity Claude", L"C:", L"C:100% (4h59m)", true),
+      m_itemAccount(L"antigravity_account", L"Antigravity Account", L"Acc:", L"AccountName", false),
+      m_itemArgon(L"antigravity_argon", L"Antigravity Argon", L"A:", L"A:100% (6d23h)", true)
 {
     wcscpy_s(m_tooltipBuffers[0], L"Antigravity Quota\r\nInitializing...");
     wcscpy_s(m_tooltipBuffers[1], L"Antigravity Quota\r\nInitializing...");
@@ -1112,6 +1113,7 @@ void CAntigravityPlugin::OnExtenedInfo(ExtendedInfoIndex index, const wchar_t* d
         m_itemGemini.SetHostLabelColor(clr);
         m_itemClaude.SetHostLabelColor(clr);
         m_itemAccount.SetHostLabelColor(clr);
+        m_itemArgon.SetHostLabelColor(clr);
     }
     else if (index == EI_VALUE_TEXT_COLOR)
     {
@@ -1121,6 +1123,7 @@ void CAntigravityPlugin::OnExtenedInfo(ExtendedInfoIndex index, const wchar_t* d
         m_itemGemini.SetHostValueColor(clr);
         m_itemClaude.SetHostValueColor(clr);
         m_itemAccount.SetHostValueColor(clr);
+        m_itemArgon.SetHostValueColor(clr);
     }
     else if (index == EI_TASKBAR_WND_NOT_SHOW_PERCENT)
     {
@@ -1314,6 +1317,7 @@ IPluginItem* CAntigravityPlugin::GetItem(int index)
     case 1: return &m_itemGemini;
     case 2: return &m_itemClaude;
     case 3: return &m_itemAccount;
+    case 4: return &m_itemArgon;
     default: return nullptr;
     }
 }
@@ -1937,14 +1941,15 @@ void CAntigravityPlugin::ParseAndUpdate(const std::string& jsonStr, bool updateS
 
         bool gFromHost = false;
         bool cFromHost = false;
+        bool aFromHost = false;
         std::wstring lblG = ResolveHostItemLabel(L"antigravity_gemini", L"G", gFromHost);
         std::wstring lblC = ResolveHostItemLabel(L"antigravity_claude", L"C", cFromHost);
-        std::wstring lblA = m_settings.hideLabels ? L"" : L"A";
+        std::wstring lblA = ResolveHostItemLabel(L"antigravity_argon", L"A", aFromHost);
         std::wstring lblWk = m_settings.hideLabels ? L"" : L"Wk";
 
         QuotaDisplayEntry eG{ lblG, gPct, std::to_wstring(gPct) + pctSuffix, gReset, false, gFromHost };
         QuotaDisplayEntry eC{ lblC, cPct, std::to_wstring(cPct) + pctSuffix, cReset, false, cFromHost };
-        QuotaDisplayEntry eA{ lblA, aPct, std::to_wstring(aPct) + pctSuffix, aReset, false, false };
+        QuotaDisplayEntry eA{ lblA, aPct, std::to_wstring(aPct) + pctSuffix, aReset, false, aFromHost };
         QuotaDisplayEntry eGWk{ lblWk, gWeeklyPct, std::to_wstring(gWeeklyPct) + pctSuffix, gWeeklyResetFmt, true, false };
         QuotaDisplayEntry eCWk{ lblWk, cWeeklyPct, std::to_wstring(cWeeklyPct) + pctSuffix, cWeeklyResetFmt, true, false };
 
@@ -2078,47 +2083,58 @@ void CAntigravityPlugin::ParseAndUpdate(const std::string& jsonStr, bool updateS
             return (lbl.empty() ? L"" : lbl + L" ") + e.pctText + (rst.empty() ? L"" : L" " + rst);
         };
 
-        std::wstring line1;
-        std::wstring line2;
-        if (m_settings.displayStyle == STYLE_MINIMAL_DOTS)
-        {
-            for (size_t i = 0; i < entries.size(); ++i)
+        auto updateCustomItem = [&](CPluginItem& item, const std::vector<QuotaDisplayEntry>& itemEntries, bool classicArgonNote) {
+            std::wstring l1;
+            std::wstring l2;
+            if (m_settings.displayStyle == STYLE_MINIMAL_DOTS)
             {
-                if (i > 0) line1 += L" | ";
-                line1 += fmtEntry(entries[i]);
-            }
-        }
-        else if (entries.size() == 1)
-        {
-            line1 = fmtEntry(entries[0]);
-            if (m_settings.displayStyle == STYLE_CLASSIC && hasArgon && m_settings.smartMode && m_lastShowA && !m_lastShowG && !m_lastShowC && !m_settings.hideWeeklyQuota)
-                line2 = L"Argon Weekly";
-        }
-        else
-        {
-            size_t numCols = (entries.size() + 1) / 2;
-            for (size_t c = 0; c < numCols; ++c)
-            {
-                if (!line1.empty()) line1 += L"  ";
-                line1 += fmtEntry(entries[c * 2]);
-                if (c * 2 + 1 < entries.size())
+                for (size_t i = 0; i < itemEntries.size(); ++i)
                 {
-                    if (!line2.empty()) line2 += L"  ";
-                    line2 += fmtEntry(entries[c * 2 + 1]);
+                    if (i > 0) l1 += L" | ";
+                    l1 += fmtEntry(itemEntries[i]);
                 }
             }
-        }
+            else if (itemEntries.size() == 1)
+            {
+                l1 = fmtEntry(itemEntries[0]);
+                if (classicArgonNote && m_settings.displayStyle == STYLE_CLASSIC && hasArgon && m_settings.smartMode && m_lastShowA && !m_lastShowG && !m_lastShowC && !m_settings.hideWeeklyQuota)
+                    l2 = L"Argon Weekly";
+            }
+            else if (!itemEntries.empty())
+            {
+                size_t numCols = (itemEntries.size() + 1) / 2;
+                for (size_t c = 0; c < numCols; ++c)
+                {
+                    if (!l1.empty()) l1 += L"  ";
+                    l1 += fmtEntry(itemEntries[c * 2]);
+                    if (c * 2 + 1 < itemEntries.size())
+                    {
+                        if (!l2.empty()) l2 += L"  ";
+                        l2 += fmtEntry(itemEntries[c * 2 + 1]);
+                    }
+                }
+            }
+            item.SetRenderState(itemEntries, m_settings);
+            item.UpdateLabel(l1.c_str());
+            item.UpdateValue(l2.c_str());
+        };
 
-        // Update structured custom-draw state & text fallbacks for Item 0
-        m_itemCombined.SetRenderState(entries, m_settings);
-        m_itemCombined.UpdateLabel(line1.c_str());
-        m_itemCombined.UpdateValue(line2.c_str());
+        // Item 0: Combined Antigravity Quota
+        updateCustomItem(m_itemCombined, entries, true);
 
-        // Item 1: Gemini
-        m_itemGemini.UpdateValue(gReset.empty() ? (std::to_wstring(gPct) + pctSuffix).c_str() : (std::to_wstring(gPct) + pctSuffix + L" (" + gReset + L")").c_str());
+        // Item 1: Split Gemini item (5h + optional Wk)
+        std::vector<QuotaDisplayEntry> geminiEntries = { eG };
+        if (!m_settings.hideWeeklyQuota) geminiEntries.push_back(eGWk);
+        updateCustomItem(m_itemGemini, geminiEntries, false);
 
-        // Item 2: Claude
-        m_itemClaude.UpdateValue(cReset.empty() ? (std::to_wstring(cPct) + pctSuffix).c_str() : (std::to_wstring(cPct) + pctSuffix + L" (" + cReset + L")").c_str());
+        // Item 2: Split Claude item (5h + optional Wk)
+        std::vector<QuotaDisplayEntry> claudeEntries = { eC };
+        if (!m_settings.hideWeeklyQuota) claudeEntries.push_back(eCWk);
+        updateCustomItem(m_itemClaude, claudeEntries, false);
+
+        // Item 4: Split Argon item
+        QuotaDisplayEntry eAItem = hasArgon ? eA : QuotaDisplayEntry{ lblA, 0, L"--", L"", false, aFromHost };
+        updateCustomItem(m_itemArgon, { eAItem }, false);
 
         // Item 3: Account
         std::wstring wLabel = Utf8ToWide(label);

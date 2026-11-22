@@ -206,6 +206,7 @@ private:
     CPluginItem m_itemGemini;   // Item 1: antigravity_gemini
     CPluginItem m_itemClaude;   // Item 2: antigravity_claude
     CPluginItem m_itemAccount;  // Item 3: antigravity_account
+    CPluginItem m_itemArgon;    // Item 4: antigravity_argon
 
     wchar_t m_tooltipBuffers[2][2048];
     std::atomic<int> m_tooltipActiveBuf{0};
