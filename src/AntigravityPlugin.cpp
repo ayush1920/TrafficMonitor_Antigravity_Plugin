@@ -23,6 +23,7 @@
 #undef _AG_DEFINED_MAX
 #endif
 #pragma comment(lib, "gdiplus.lib")
+#pragma comment(lib, "msimg32.lib")
 
 using json = nlohmann::json;
 
@@ -237,6 +238,94 @@ static int MeasureTextWidth(HDC hdc, const std::wstring& text, bool tabularDigit
     return total;
 }
 
+// Renders GDI text with proper premultiplied alpha onto hdc.
+// This bypasses host DrawTextW hooks that perform non-premultiplied AlphaBlend
+// (which can cause channel overflow / red artifacts or hollow glyphs on mid-tone colors).
+static void DrawTextPremultiplied(HDC hdc, const wchar_t* text, int len, LPRECT lprc, UINT format, COLORREF color)
+{
+    if (!hdc || !text || len == 0 || !lprc) return;
+    int w = lprc->right - lprc->left;
+    int h = lprc->bottom - lprc->top;
+    if (w <= 0 || h <= 0) return;
+
+    HDC memDC = CreateCompatibleDC(NULL);
+    if (!memDC)
+    {
+        DrawTextW(hdc, text, len, lprc, format);
+        return;
+    }
+
+    BITMAPINFO bmi{};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = w;
+    bmi.bmiHeader.biHeight = -h; // top-down DIB
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    void* pBits = nullptr;
+    HBITMAP hBmp = CreateDIBSection(memDC, &bmi, DIB_RGB_COLORS, &pBits, NULL, 0);
+    if (!hBmp || !pBits)
+    {
+        if (hBmp) DeleteObject(hBmp);
+        DeleteDC(memDC);
+        DrawTextW(hdc, text, len, lprc, format);
+        return;
+    }
+
+    HGDIOBJ hOldBmp = SelectObject(memDC, hBmp);
+    HFONT hFont = (HFONT)GetCurrentObject(hdc, OBJ_FONT);
+    HGDIOBJ hOldFont = hFont ? SelectObject(memDC, hFont) : nullptr;
+
+    SetTextColor(memDC, RGB(255, 255, 255));
+    SetBkColor(memDC, RGB(0, 0, 0));
+    SetBkMode(memDC, OPAQUE);
+
+    RECT rcLocal = { 0, 0, w, h };
+    DrawTextW(memDC, text, len, &rcLocal, format);
+    GdiFlush();
+
+    BYTE r = GetRValue(color);
+    BYTE g = GetGValue(color);
+    BYTE b = GetBValue(color);
+
+    BYTE* px = static_cast<BYTE*>(pBits);
+    const size_t count = static_cast<size_t>(w) * static_cast<size_t>(h);
+    for (size_t i = 0; i < count; ++i)
+    {
+        uint16_t sum = static_cast<uint16_t>(px[0]) + static_cast<uint16_t>(px[1]) + static_cast<uint16_t>(px[2]);
+        if (sum == 0)
+        {
+            px[0] = 0;
+            px[1] = 0;
+            px[2] = 0;
+            px[3] = 0;
+        }
+        else
+        {
+            uint32_t a = (sum + 1u) / 3u;
+            if (a > 255u) a = 255u;
+            px[0] = static_cast<BYTE>((static_cast<uint32_t>(b) * a + 127u) / 255u);
+            px[1] = static_cast<BYTE>((static_cast<uint32_t>(g) * a + 127u) / 255u);
+            px[2] = static_cast<BYTE>((static_cast<uint32_t>(r) * a + 127u) / 255u);
+            px[3] = static_cast<BYTE>(a);
+        }
+        px += 4;
+    }
+
+    BLENDFUNCTION bf{};
+    bf.BlendOp = AC_SRC_OVER;
+    bf.BlendFlags = 0;
+    bf.SourceConstantAlpha = 255;
+    bf.AlphaFormat = AC_SRC_ALPHA;
+    AlphaBlend(hdc, lprc->left, lprc->top, w, h, memDC, 0, 0, w, h, bf);
+
+    if (hOldFont) SelectObject(memDC, hOldFont);
+    SelectObject(memDC, hOldBmp);
+    DeleteObject(hBmp);
+    DeleteDC(memDC);
+}
+
 static void DrawStyledText(HDC hdc, int x, int y, int w, int h, const std::wstring& text,
                            COLORREF color, UINT alignH, bool tabularDigits, int digitSlotW)
 {
@@ -245,7 +334,7 @@ static void DrawStyledText(HDC hdc, int x, int y, int w, int h, const std::wstri
     if (!tabularDigits)
     {
         RECT rc = { x, y, x + w, y + h };
-        DrawTextW(hdc, text.c_str(), (int)text.size(), &rc, alignH | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        DrawTextPremultiplied(hdc, text.c_str(), (int)text.size(), &rc, alignH | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX, color);
         SetTextColor(hdc, oldClr);
         return;
     }
@@ -262,7 +351,7 @@ static void DrawStyledText(HDC hdc, int x, int y, int w, int h, const std::wstri
             SIZE sz = { 0, 0 };
             GetTextExtentPoint32W(hdc, run.c_str(), (int)run.size(), &sz);
             RECT rc = { curX, y, curX + sz.cx + 2, y + h };
-            DrawTextW(hdc, run.c_str(), (int)run.size(), &rc, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+            DrawTextPremultiplied(hdc, run.c_str(), (int)run.size(), &rc, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX, color);
             curX += sz.cx;
             run.clear();
         }
@@ -274,7 +363,7 @@ static void DrawStyledText(HDC hdc, int x, int y, int w, int h, const std::wstri
         {
             flushRun();
             RECT rc = { curX, y, curX + digitSlotW, y + h };
-            DrawTextW(hdc, &ch, 1, &rc, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+            DrawTextPremultiplied(hdc, &ch, 1, &rc, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX, color);
             curX += digitSlotW;
         }
         else
@@ -461,6 +550,7 @@ static void DrawSingleColumnEntry(HDC hdc, int rx, int ry, int rw, int rh,
     bool insidePill = (style == STYLE_PILL_BADGES);
 
     COLORREF secColor = ComputeSecondaryColor(valueColor, darkMode, insidePill, settings.dimSecondaryInfo);
+    COLORREF pillResetColor = insidePill ? valueColor : secColor;
     COLORREF lblColor = labelColor;
     COLORREF threshColor = GetThresholdColor(e.percent, darkMode);
 
@@ -486,18 +576,23 @@ static void DrawSingleColumnEntry(HDC hdc, int rx, int ry, int rw, int rh,
             Gdiplus::REAL phRect = (Gdiplus::REAL)(rh - padV * 2 - 1);
             Gdiplus::REAL radius = std::min(5.0f, phRect * 0.28f);
 
-            // Container fill and border MUST adapt to the text inside for crystal-clear readability
+            // Translucent pill container adapting to text luminance so the taskbar wallpaper
+            // shows through while keeping text crystal-clear.
             int valLum = (GetRValue(valueColor) * 299 + GetGValue(valueColor) * 587 + GetBValue(valueColor) * 114) / 1000;
             int lblLum = (GetRValue(lblColor) * 299 + GetGValue(lblColor) * 587 + GetBValue(lblColor) * 114) / 1000;
             bool textIsDark = (std::min(valLum, lblLum) < 128);
 
-            COLORREF fillClr = textIsDark ? RGB(240, 243, 248) : RGB(34, 38, 46);
-            COLORREF borderClr = textIsDark ? RGB(188, 196, 208) : RGB(66, 73, 88);
+            Gdiplus::Color fillGp = textIsDark
+                ? Gdiplus::Color(48, 255, 255, 255)
+                : Gdiplus::Color(75, 20, 24, 32);
+            Gdiplus::Color borderGp = textIsDark
+                ? Gdiplus::Color(90, 45, 50, 62)
+                : Gdiplus::Color(90, 255, 255, 255);
 
             Gdiplus::GraphicsPath path;
             AddRoundedRectPath(path, px, py, pwRect, phRect, radius);
-            Gdiplus::SolidBrush fillBrush(ToGpColor(fillClr));
-            Gdiplus::Pen borderPen(ToGpColor(borderClr), 1.0f);
+            Gdiplus::SolidBrush fillBrush(fillGp);
+            Gdiplus::Pen borderPen(borderGp, 1.0f);
             g.FillPath(&fillBrush, &path);
             g.DrawPath(&borderPen, &path);
 
@@ -507,7 +602,7 @@ static void DrawSingleColumnEntry(HDC hdc, int rx, int ry, int rw, int rh,
                 Gdiplus::REAL r = m.clockW * 0.45f;
                 Gdiplus::REAL cx = clockStartX + m.clockW * 0.5f;
                 Gdiplus::REAL cy = ry + rh * 0.5f;
-                DrawClockIcon(g, cx, cy, r, secColor);
+                DrawClockIcon(g, cx, cy, r, pillResetColor);
             }
         }
         else if (style == STYLE_PROGRESS_BAR)
@@ -592,7 +687,7 @@ static void DrawSingleColumnEntry(HDC hdc, int rx, int ry, int rw, int rh,
         if (!rst.empty())
         {
             curX += pw + m.gapMed + m.clockW + m.clockGap;
-            DrawStyledText(hdc, curX, textY, rstw, textH, rst, secColor, aligned ? DT_RIGHT : DT_LEFT, tab, m.digitSlotW);
+            DrawStyledText(hdc, curX, textY, rstw, textH, rst, pillResetColor, aligned ? DT_RIGHT : DT_LEFT, tab, m.digitSlotW);
         }
     }
 }
