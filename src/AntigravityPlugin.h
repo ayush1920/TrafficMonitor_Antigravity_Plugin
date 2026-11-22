@@ -74,6 +74,7 @@ public:
     virtual const wchar_t* GetItemValueSampleText() const override { return m_sample.c_str(); }
 
     virtual bool IsCustomDraw() const override { return m_isCustomDraw; }
+    virtual int IsDoubleLineExclusive() const override;
     virtual int GetItemWidth() const override { return 110; }
     virtual int GetItemWidthEx(void* hDC) const override;
     virtual void DrawItem(void* hDC, int x, int y, int w, int h, bool dark_mode) override;

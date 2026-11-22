@@ -832,6 +832,15 @@ static int ComputeSideBySideMetrics(HDC hdc, const std::vector<QuotaDisplayEntry
     return totalW;
 }
 
+int CPluginItem::IsDoubleLineExclusive() const
+{
+    if (!m_isCustomDraw) return 0;
+    std::lock_guard<std::mutex> lock(m_renderMutex);
+    if (m_renderSettings.displayStyle == STYLE_MINIMAL_DOTS) return 0;
+    if (m_renderEntries.empty()) return 1;
+    return (m_renderEntries.size() >= 2) ? 1 : 0;
+}
+
 int CPluginItem::GetItemWidthEx(void* hDC) const
 {
     if (!hDC) return 110;

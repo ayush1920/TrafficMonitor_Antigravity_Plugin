@@ -372,8 +372,28 @@ int main()
         assert(sl2NoWk.find(L"C:75%") != std::wstring::npos);
         int wStdNoWk = item0->GetItemWidthEx(hdcMem);
         assert(wStdAll > wStdNoWk);
-        std::cout << "Standard Mode weekly quota visibility tests (withWk=" << wStdAll
-                  << "px, noWk=" << wStdNoWk << "px) passed!" << std::endl;
+
+        // Verify TrafficMonitor API v8 IsDoubleLineExclusive() claims 2 taskbar rows whenever
+        // displaying 2+ entries in non-MinimalDots styles (so paired taskbar items don't squish into 1 row).
+        s.displayStyle = STYLE_PROGRESS_BAR;
+        s.hideWeeklyQuota = false;
+        s.smartMode = false;
+        plugin.ApplySettings(s);
+        assert(item0->IsDoubleLineExclusive() == 1);
+
+        s.smartMode = true;
+        s.hideWeeklyQuota = true;
+        plugin.ApplySettings(s);
+        plugin.ParseAndUpdate(MakeJson(0.85, 1.0, 1.0), false);
+        assert(item0->IsDoubleLineExclusive() == 0); // Single-entry centered row can pair cleanly
+
+        s.displayStyle = STYLE_MINIMAL_DOTS;
+        s.hideWeeklyQuota = false;
+        plugin.ApplySettings(s);
+        assert(item0->IsDoubleLineExclusive() == 0); // Compact single-line dots never force 2 rows
+
+        std::cout << "Standard Mode weekly quota visibility & IsDoubleLineExclusive tests (withWk="
+                  << wStdAll << "px, noWk=" << wStdNoWk << "px) passed!" << std::endl;
     }
 
     SelectObject(hdcMem, hOldFont);
