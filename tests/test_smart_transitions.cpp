@@ -440,6 +440,46 @@ int main()
     assert(aw > 0.93 && aw < 0.95 && awr == "6d 23h");
     std::cout << "QuotaSync parsing & formatting tests passed!" << std::endl;
 
+    // 17. Test Short Reset Time truncation (no rounding up) and minutes fallback
+    {
+        auto makeResetJson = [](const std::string& g5r, const std::string& gWkr) {
+            return std::string("[{\"Label\":\"Test\",\"Email\":\"test@example.com\",\"IsActive\":true,") +
+                   "\"GFiveH\":0.80,\"GWeekly\":0.90,\"GFiveHReset\":\"" + g5r + "\",\"GWeeklyReset\":\"" + gWkr + "\"," +
+                   "\"CFiveH\":1.0,\"CWeekly\":1.0,\"CFiveHReset\":\"4h 59m\",\"CWeeklyReset\":\"6d 10h\"," +
+                   "\"HasArgon\":false}]";
+        };
+
+        CAntigravityPlugin rstPlugin;
+        PluginSettings origRstSettings = rstPlugin.GetSettings();
+        PluginSettings rs;
+        rs.displayStyle = STYLE_CLASSIC;
+        rs.smartMode = true;
+        rs.hideWeeklyQuota = false;
+        rs.hideResetTime = false;
+        rs.shortResetTime = true;
+        rstPlugin.ApplySettings(rs);
+        IPluginItem* rItem = rstPlugin.GetItem(0);
+
+        rstPlugin.ParseAndUpdate(makeResetJson("3h 35m", "6d 23h"));
+        assert(std::wstring(rItem->GetItemLableText()) == L"G:80% (3h)");
+        assert(std::wstring(rItem->GetItemValueText()) == L"Wk:90% (6d)");
+
+        rstPlugin.ParseAndUpdate(makeResetJson("4h 20m", "1d 15h"));
+        assert(std::wstring(rItem->GetItemLableText()) == L"G:80% (4h)");
+        assert(std::wstring(rItem->GetItemValueText()) == L"Wk:90% (1d)");
+
+        rstPlugin.ParseAndUpdate(makeResetJson("2h 40m", "0d 0h 50m"));
+        assert(std::wstring(rItem->GetItemLableText()) == L"G:80% (2h)");
+        assert(std::wstring(rItem->GetItemValueText()) == L"Wk:90% (50m)");
+
+        rstPlugin.ParseAndUpdate(makeResetJson("0h 50m", "0h 5m"));
+        assert(std::wstring(rItem->GetItemLableText()) == L"G:80% (50m)");
+        assert(std::wstring(rItem->GetItemValueText()) == L"Wk:90% (5m)");
+
+        rstPlugin.ApplySettings(origRstSettings);
+        std::cout << "Short reset time truncation tests (3h 35m->3h, 2h 40m->2h, 0h 50m->50m, 6d 23h->6d) passed!" << std::endl;
+    }
+
     std::cout << "\nALL 16 STYLE, POLISH, TRANSITION, PERCENT AND QUOTASYNC TESTS PASSED PERFECTLY!" << std::endl;
     return 0;
 }

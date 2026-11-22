@@ -87,7 +87,7 @@ static std::wstring FormatResetTime(const std::string& raw, bool shortForm)
         return result;
     }
 
-    // Short form: smart rounding to single unit (e.g. 4h 50m -> 5h, 6d 23h -> 7d)
+    // Short form: truncate to largest non-zero unit (e.g. 3h 35m -> 3h, 4h 20m -> 4h, 2h 40m -> 2h, 0h 50m -> 50m, 6d 23h -> 6d)
     int days = -1, hours = -1, mins = -1;
     size_t i = 0;
     while (i < raw.size())
@@ -120,26 +120,19 @@ static std::wstring FormatResetTime(const std::string& raw, bool shortForm)
 
     if (days > 0)
     {
-        if (hours >= 12) days += 1;
         return std::to_wstring(days) + L"d";
-    }
-    if (days == 0 && hours >= 0)
-    {
-        if (mins >= 30) hours += 1;
-        return std::to_wstring(hours) + L"h";
     }
     if (hours > 0)
     {
-        if (mins >= 30) hours += 1;
         return std::to_wstring(hours) + L"h";
-    }
-    if (hours == 0 && mins >= 0)
-    {
-        return std::to_wstring(mins) + L"m";
     }
     if (mins >= 0)
     {
         return std::to_wstring(mins) + L"m";
+    }
+    if (days == 0 || hours == 0)
+    {
+        return L"0m";
     }
 
     std::wstring fallback;
