@@ -78,12 +78,33 @@ static std::wstring FormatResetTime(const std::string& raw, bool shortForm)
 
     if (!shortForm)
     {
-        // Long form: strip spaces (e.g. "4h 50m" -> "4h50m")
+        // Long form: keep/normalize a single space between time units (e.g. "4h 50m", "6d 23h")
         std::wstring result;
-        for (char c : raw)
+        bool lastWasSpace = true; // trim leading spaces
+        for (size_t idx = 0; idx < raw.size(); ++idx)
         {
-            if (c != ' ') result.push_back((wchar_t)c);
+            unsigned char ch = static_cast<unsigned char>(raw[idx]);
+            if (ch == ' ' || ch == '\t')
+            {
+                if (!lastWasSpace)
+                {
+                    result.push_back(L' ');
+                    lastWasSpace = true;
+                }
+                continue;
+            }
+            if (!result.empty() && !lastWasSpace && isdigit(ch))
+            {
+                wchar_t prev = result.back();
+                if (prev == L'd' || prev == L'D' || prev == L'h' || prev == L'H' || prev == L'm' || prev == L'M')
+                {
+                    result.push_back(L' ');
+                }
+            }
+            result.push_back((wchar_t)ch);
+            lastWasSpace = false;
         }
+        while (!result.empty() && result.back() == L' ') result.pop_back();
         return result;
     }
 

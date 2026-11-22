@@ -71,6 +71,6 @@ There are three ways to customize the Antigravity plugin inside TrafficMonitor:
 | Setting | Location | Significance |
 | :--- | :--- | :--- |
 | **Hide Reset Time** | Plugin Options / Menu | Removes countdowns from the taskbar while preserving exact timers inside the hover tooltip. Ignored visually in *Minimal Status Dots* (which always keeps timers in tooltip). |
-| **Long Form vs Short Form** | Plugin Options / Menu | *Long Form* displays exact `4h25m` / `6d23h`; *Short Form* truncates to the largest non-zero unit (`3h 35m` → `3h`, `2h 40m` → `2h`, `0h 50m` → `50m`, `6d 23h` → `6d`) to save taskbar width cleanly. |
+| **Long Form vs Short Form** | Plugin Options / Menu | *Long Form* displays exact `4h 25m` / `6d 23h`; *Short Form* truncates to the largest non-zero unit (`3h 35m` → `3h`, `2h 40m` → `2h`, `0h 50m` → `50m`, `6d 23h` → `6d`) to save taskbar width cleanly. |
 | **Display Text Settings** | TrafficMonitor Host | Custom labels configured in TrafficMonitor (`G:`, `C:`, `Gem:`, `GPT:`, or blank) are applied **verbatim across every Visual Style** — no colons are stripped or altered. |
 | **Don't Show `'%'`** | TrafficMonitor Host | Natively hides `%` suffixes across all styles via TrafficMonitor's `OnExtenedInfo`. |

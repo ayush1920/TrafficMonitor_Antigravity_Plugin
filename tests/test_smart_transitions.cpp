@@ -476,8 +476,19 @@ int main()
         assert(std::wstring(rItem->GetItemLableText()) == L"G:80% (50m)");
         assert(std::wstring(rItem->GetItemValueText()) == L"Wk:90% (5m)");
 
+        // Long form preserves/normalizes space between time units (e.g. 3h 05m, 6d 23h)
+        rs.shortResetTime = false;
+        rstPlugin.ApplySettings(rs);
+        rstPlugin.ParseAndUpdate(makeResetJson("3h 05m", "6d 23h"));
+        assert(std::wstring(rItem->GetItemLableText()) == L"G:80% (3h 05m)");
+        assert(std::wstring(rItem->GetItemValueText()) == L"Wk:90% (6d 23h)");
+
+        rstPlugin.ParseAndUpdate(makeResetJson("3h05m", "6d23h"));
+        assert(std::wstring(rItem->GetItemLableText()) == L"G:80% (3h 05m)");
+        assert(std::wstring(rItem->GetItemValueText()) == L"Wk:90% (6d 23h)");
+
         rstPlugin.ApplySettings(origRstSettings);
-        std::cout << "Short reset time truncation tests (3h 35m->3h, 2h 40m->2h, 0h 50m->50m, 6d 23h->6d) passed!" << std::endl;
+        std::cout << "Reset time formatting tests (short truncation & long spaced units) passed!" << std::endl;
     }
 
     // 18. Test per-model CustomDraw split items (Gemini, Claude, Argon) for multi-row taskbar layouts
