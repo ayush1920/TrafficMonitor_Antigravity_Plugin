@@ -1,142 +1,76 @@
 # TrafficMonitor Antigravity Plugin
 
-An ultra-lightweight, native C++ (x86 & x64) plugin for **TrafficMonitor** on Windows that monitors Google Antigravity, Gemini, Claude, and Argon quotas directly inside your Windows taskbar.
-
 <p align="center">
-  <img src="docs/images/visual-styles.png" alt="Visual Styles Gallery" width="100%" />
+  <a href="https://github.com/zhongyang219/TrafficMonitor"><img src="https://img.shields.io/badge/Host-TrafficMonitor-blue" alt="Host: TrafficMonitor" /></a>
+  <a href="https://github.com/ayush1920/TrafficMonitor_Antigravity_Plugin/releases"><img src="https://img.shields.io/github/v/release/ayush1920/TrafficMonitor_Antigravity_Plugin" alt="Latest Release" /></a>
+  <img src="https://img.shields.io/badge/Platform-Windows%20x64%20%7C%20x86-lightgrey" alt="Platform: Windows x64 | x86" />
+  <img src="https://img.shields.io/badge/License-MIT-green" alt="License: MIT" />
 </p>
 
----
-
-## Key Features
-
-- **Standalone & Shared Quota Polling**: Works completely independently (no Rainmeter or AgVerse installation required) with automatic background polling every 5 minutes, OAuth token refresh, IDE credential discovery, and a **Sign In with Google...** command. When AgVerse or Rainmeter is also installed, it shares `%LOCALAPPDATA%\AntigravityQuota\vault.dat` seamlessly.
-- **5 Native GDI / GDI+ Visual Styles**: Choose from *Typographic Hierarchy*, *Micro Progress Bars*, *Minimal Status Dots*, *Stacked Pill Badges*, and *Classic* — each tuned for both **Dark** and **Light** Windows 11 taskbars.
-- **Health Threshold Color Schema**:
-  - 🟢 **Green (`> 60%`)** — Healthy capacity remaining
-  - 🟡 **Yellow (`21% – 60%`, `<= 60%` inclusive)** — Moderate usage
-  - 🔴 **Red (`<= 20%` inclusive)** — Low quota warning
-- **Host Display Text & Percent Integration**: Labels set in TrafficMonitor's **Display Text Settings** (such as `G:`, `C:`, or custom provider names) render **verbatim across every Visual Style**, and TrafficMonitor's native `Don't show '%'` setting is honored automatically.
-- **Rich Hover Tooltip**: Always retains full breakdown of active accounts, 5-hour & weekly percentages, and exact reset countdowns even when the taskbar display is minimized.
-
----
-
-## How to Discover Plugin Options
-
-Many customization controls live inside TrafficMonitor's plugin menu and host dialogs. There are **three fast ways** to configure the plugin:
-
-<p align="center">
-  <img src="docs/images/discover-options.png" alt="How to Discover and Configure Plugin Options" width="100%" />
-</p>
-
-1. **Taskbar Right-Click Quick Toggles (Fastest)**  
-   Right-click the Antigravity widget directly on the taskbar to toggle **Smart Mode (Active Quotas Only)**, **Hide Weekly Quota (Wk)**, **Hide Reset Time**, **Short Reset Time (e.g. 5h)**, **Refresh Quota Now**, or **Sign In with Google...** without opening any dialog.
-2. **Full Options Dialog (All Visual Styles & Polish Controls)**  
-   Right-click TrafficMonitor → **Plug-in Manage...** → select **Antigravity Quota** → click **Options...** (or right-click the row → **Options...**). Use **Apply** to preview changes live on your taskbar.
-3. **Host Integration Settings (Labels, Item Selection & `%`)**  
-   - **Enable Taskbar Item**: Right-click → **Display Settings...** → check **Antigravity Quota** *(you can also enable `Antigravity Gemini`, `Antigravity Claude`, or `Antigravity Account` individually)*.
-   - **Customize Labels**: **Options...** → **Taskbar Window Settings** → **Display Text Settings...** → edit `Antigravity Gemini` / `Antigravity Claude` (e.g., `G:`, `Gem:`, `GPT:`, or blank).
-   - **Hide/Show `%`**: **Options...** → **Taskbar Window Settings** → **Don't show '%'**.
-
-<p align="center">
-  <img src="docs/images/options-dialog.png" alt="Antigravity Quota Options Dialog" width="460" />
-</p>
+A lightweight, native C++ (x86 & x64) plugin for **[TrafficMonitor](https://github.com/zhongyang219/TrafficMonitor)** on Windows that displays your **Google Antigravity**, **Gemini**, **Claude**, and **Argon** quotas directly inside the Windows taskbar.
 
 ---
 
 ## Visual Styles
 
-All five **Visual Styles** are rendered via crisp native GDI text + anti-aliased GDI+ vector graphics and automatically adapt to Windows 11 Light and Dark taskbars.
+Five crisp native GDI / GDI+ layouts that automatically adapt to **Dark** and **Light** Windows 11 taskbars, using a unified health color schema (**Green** `> 60%`, **Yellow** `21–60% (<= 60%)`, **Red** `<= 20%`):
 
-| Visual Style | Description | Best For |
+<p align="center">
+  <img src="docs/images/visual-styles.png" alt="Visual Styles Gallery" width="100%" />
+</p>
+
+| Visual Style | Look & Feel | Best For |
 | :--- | :--- | :--- |
-| **Typographic Hierarchy** *(Default)* | Clean spacing with middot (`·`) separator and optionally dimmed reset timers. | Clean daily readability with low visual clutter |
-| **Micro Progress Bars** | Capsule progress bars color-coded by threshold (`> 60%` green, `21–60%` yellow, `<= 20%` red). | Instant peripheral health scanning |
-| **Minimal Status Dots** | Compact horizontal strip with colored status dots; reset timers stay in the hover tooltip. | Narrow / crowded taskbars |
-| **Stacked Pill Badges** | Translucent rounded pill containers with adaptive Light/Dark contrast and vector clock icons. | Modern Windows 11 / glass taskbar setups |
-| **Classic** | Traditional `G:82% (4h)` text formatting with parentheses. | Users upgrading from v1.x / classic layouts |
+| **Typographic Hierarchy** *(Default)* | Clean spacing with middot (`·`) separator and dimmed timers | Everyday low-clutter readability |
+| **Micro Progress Bars** | Capsule health bars colored by `>60% / <=60% / <=20%` thresholds | Instant peripheral capacity scanning |
+| **Minimal Status Dots** | Single-line dot indicator strip; timers move to hover tooltip | Narrow or crowded taskbars |
+| **Stacked Pill Badges** | Adaptive translucent pills with aligned metrics & vector clock icons | Modern glass / translucent Windows 11 taskbars |
+| **Classic** | Traditional `G:82% (4h)` colon & parentheses layout | Compact retro text style |
 
 ---
 
-## Recommended Configuration Profiles
+## Highlights
 
-Combine **Visual Style + Smart Mode + Weekly (`Wk`) + Timers + Labels** into ready-to-use profiles tailored to your workflow:
-
-<p align="center">
-  <img src="docs/images/profiles-showcase.png" alt="Recommended End-User Configuration Profiles" width="100%" />
-</p>
-
-| Profile | Best For | Plugin + Host Option Recipe (`X + Y + Z`) | Resulting Effect |
-| :--- | :--- | :--- | :--- |
-| **1. Minimal** | Tiny footprint & uncluttered taskbar | **Minimal Status Dots** + `Smart Mode: On` + `Hide model labels: On` + Host `Don't show '%': On` | Ultra-compact `● 82 \| ● 45` indicator; full details stay in tooltip |
-| **2. Clean** *(Daily Driver)* | Balanced single-model tracking | **Typographic Hierarchy** + `Smart Mode: On` + `Hide Wk: Off` + `Short form` timers + `Dim secondary: On` + `Align & Tabular: On` | Clean 2-line active readout (`G 82% · 4h` / `Wk 93% · 7d`) |
-| **3. Elegant** | Aesthetic Light/Dark glass taskbars | **Stacked Pill Badges** + `Smart Mode: On` + `Hide Wk: Off` + `Short form` + `Dim secondary: On` + `Align & Tabular: On` | Frosted translucent pills with aligned numbers and clock icons |
-| **4. GPT / Claude Power User** | Watching multiple AI quotas together | **Micro Progress Bars** + `Smart Mode: Off` + `Hide Wk: On` + `Short form` + Host `Display Text`: `Gem:` / `GPT:` | Side-by-side color bars alerting yellow `<= 60%` & red `<= 20%` |
-| **5. Verbose** | Full telemetry without hovering | **Stacked Pill Badges** *(or Classic)* + `Smart Mode: Off` + `Hide Wk: Off` *(or `On` for 5h-only)* + `Long form (4h25m)` + `Dim secondary: Off` + Host `Display Text`: `G:` / `C:` | All models (with optional `Wk` rows), exact minute timers, high contrast |
-| **6. Capacity Focus** | Percentage & bar health only | **Micro Progress Bars** + `Smart Mode: On` + `Hide Weekly Quota (Wk): On` + `Hide Reset Time: On` | Single vertically centered health bar (`G: ▆▆▆░░ 52%`) |
+- **Standalone & Zero-Config Quota Sync**: Built-in 5-minute background WinHTTP polling, automatic OAuth refresh, IDE credential discovery, and **Sign In with Google...** right-click action (shares `%LOCALAPPDATA%\AntigravityQuota\vault.dat` if AgVerse or Rainmeter is also installed).
+- **2-Row Taskbar Native**: Claims a dedicated 2-row column via TrafficMonitor API v8 (`IsDoubleLineExclusive`) for multi-row styles, while keeping *Minimal Status Dots* and single-row views compact.
+- **Full Host Integration**: Respects TrafficMonitor's **Display Text Settings** (`G:`, `C:`, custom names) verbatim across all styles, honors **`Don't show '%'`** natively, and keeps complete reset countdowns in the hover tooltip.
 
 ---
 
-## Option Combinations
+## Installation (Plug & Play)
 
-### Smart Mode & Weekly Quota (`Wk`) Behavior
-Pairing **Smart Mode** with **Hide Weekly Quota (`Wk`)** controls how many items appear and when rows expand or vertically center:
+Requires **[TrafficMonitor](https://github.com/zhongyang219/TrafficMonitor)** (API v8 / v1.84+ recommended) on Windows.
 
-<p align="center">
-  <img src="docs/images/combo-smart-weekly.png" alt="Smart Mode and Weekly Quota Combinations" width="100%" />
-</p>
-
-- **Smart Mode On + Show `Wk`**: Displays the currently draining 5-hour quota on Row 1 and its weekly (`Wk`) limit on Row 2 (`Typographic`, `Progress Bar`, or `Pill Badges`).
-- **Smart Mode On + Hide `Wk`**: Drops the `Wk` row and **vertically centers** the single active quota cleanly in the taskbar slot.
-- **Concurrent Multi-Model Drop**: When two or more models decrease in the same poll interval, Smart Mode automatically expands to track all dropping models simultaneously, then falls back cleanly when idle.
-- **Smart Mode Off (Standard)**: Pins Gemini, Claude, and Argon together — paired with each model's `Wk` row when **Hide Weekly Quota** is unchecked (`(G / Wk) | (C / Wk) | A`), or compact `(G / C) | A` when **Hide Weekly Quota** is checked.
-
-### Reset Timers, Model Labels & Host Controls
-Mixing timer formatting, visual dimming, custom host text, and label removal lets you dial in exact information density:
-
-<p align="center">
-  <img src="docs/images/combo-timers-labels-host.png" alt="Reset Timers, Model Labels, and Host Settings Combinations" width="100%" />
-</p>
-
-- **Reset Time Display + Dim Secondary Info**:
-  - *Long Form (`4h25m`, `6d23h`)* + `Dim Off` maximizes precision and contrast.
-  - *Short Form (`4h`, `7d`)* + `Dim On` pushes timers into quiet background hierarchy so percentages pop first.
-  - *Hide Reset Time* removes timers from the taskbar completely while preserving exact countdowns in the hover tooltip.
-- **Model Labels (`Display Text Settings` + `Hide model labels`)**:
-  - Custom strings configured in TrafficMonitor's **Display Text Settings** (like `G:`, `Gem:`, `Cl:`, or even blank) are displayed **verbatim in every Visual Style** — including *Stacked Pill Badges*, *Typographic*, *Progress Bars*, and *Minimal Status Dots*.
-  - Checking **Hide model labels** in Plugin Options strips `G`, `C`, `A`, and `Wk` prefixes cleanly across all styles and removes column label padding.
-- **Host `%` Control**: Unchecking/checking TrafficMonitor's `Don't show '%'` immediately toggles `%` suffixes across every style without changing plugin settings.
-
----
-
-## Installation
-
-1. Download the latest release from the [Releases](https://github.com/ayush1920/TrafficMonitor_Antigravity_Plugin/releases) page.
-2. Select the build matching your TrafficMonitor architecture (`x64` or `x86`).
-3. Copy `AntigravityPlugin.dll` to the `plugins/` directory inside your TrafficMonitor folder:
+1. Download **`AntigravityPlugin-x64.zip`** (or `x86` to match your TrafficMonitor build) from the **[Releases](https://github.com/ayush1920/TrafficMonitor_Antigravity_Plugin/releases)** page.
+2. Extract `AntigravityPlugin.dll` into your `TrafficMonitor/plugins/` folder:
    ```text
    TrafficMonitor/
    ├── plugins/
    │   └── AntigravityPlugin.dll
    └── TrafficMonitor.exe
    ```
-4. Restart TrafficMonitor.
-5. Right-click TrafficMonitor → **Display Settings...** and enable **Antigravity Quota** in the Taskbar display options.
+3. Restart **TrafficMonitor**.
+4. Right-click TrafficMonitor → **Display Settings...** and enable **Antigravity Quota** on the Taskbar.
+
+---
+
+## Documentation
+
+- **[Options & Discovery Guide](docs/options-guide.md)** — How to find plugin settings in TrafficMonitor, full breakdown of every option's purpose, and visual comparisons of *Smart Mode + Weekly (`Wk`)*, *Reset Timers*, *Labels*, and *Host `%`*.
+- **[Recommended Configuration Profiles](docs/profiles.md)** — Ready-to-use recipes for *Minimal*, *Clean*, *Elegant*, *GPT / Claude Power User*, *Verbose*, and *Capacity Focus* setups.
 
 ---
 
 ## Building from Source
 
-### Prerequisites
-- Visual Studio 2022 (with MSVC C++17 build tools)
-- CMake 3.21 or higher
+Requires **Visual Studio 2022** (MSVC C++17) and **CMake 3.21+**:
 
-### Build Steps
-Run the automated build & verification script:
 ```cmd
 build.bat
 ```
-Or build using CMake:
+
+Or via CMake:
+
 ```cmd
 cmake -B build/x64 -A x64 -DCMAKE_BUILD_TYPE=Release
 cmake --build build/x64 --config Release
