@@ -204,6 +204,54 @@ int main()
         s.hideLabels = false;
     }
 
+    // 15b. Test threshold color boundaries (<= 20% red, <= 60% yellow, > 60% green)
+    {
+        s.displayStyle = STYLE_MINIMAL_DOTS;
+        s.smartMode = true;
+        s.hideWeeklyQuota = true;
+        plugin.ApplySettings(s);
+
+        auto renderDotSample = [&](double frac, bool dark) -> COLORREF {
+            plugin.ParseAndUpdate(MakeJson(frac, 1.0, 1.0));
+            RECT clearRc = { 0, 0, 200, 40 };
+            FillRect(hdcMem, &clearRc, (HBRUSH)GetStockObject(dark ? BLACK_BRUSH : WHITE_BRUSH));
+            SetTextColor(hdcMem, dark ? RGB(255, 255, 255) : RGB(0, 0, 0));
+            item0->DrawItem(hdcMem, 0, 0, 200, 40, dark);
+            // Isolate the colored status dot by maximum chroma (maxRGB - minRGB) in leftmost column
+            COLORREF best = 0;
+            int bestChroma = -1;
+            for (int px = 0; px < 12; ++px)
+            {
+                for (int py = 10; py < 30; ++py)
+                {
+                    COLORREF c = GetPixel(hdcMem, px, py);
+                    int r = GetRValue(c), g = GetGValue(c), b = GetBValue(c);
+                    int hi = (r > g ? (r > b ? r : b) : (g > b ? g : b));
+                    int lo = (r < g ? (r < b ? r : b) : (g < b ? g : b));
+                    int chroma = hi - lo;
+                    if (chroma > bestChroma) { bestChroma = chroma; best = c; }
+                }
+            }
+            return best;
+        };
+
+        for (bool dark : { true, false })
+        {
+            COLORREF c61 = renderDotSample(0.61, dark); // Green (> 60%)
+            COLORREF c60 = renderDotSample(0.60, dark); // Yellow (<= 60%)
+            COLORREF c21 = renderDotSample(0.21, dark); // Yellow (> 20%)
+            COLORREF c20 = renderDotSample(0.20, dark); // Red (<= 20%)
+            COLORREF c00 = renderDotSample(0.00, dark); // Red (0%)
+
+            assert(GetGValue(c61) > GetRValue(c61) + 50); // Green dominant
+            assert(GetRValue(c60) > 180 && GetGValue(c60) > 100 && GetGValue(c60) < GetRValue(c60) && GetBValue(c60) < 80); // Yellow/Amber
+            assert(GetRValue(c21) > 180 && GetGValue(c21) > 100 && GetGValue(c21) < GetRValue(c21) && GetBValue(c21) < 80); // Yellow/Amber
+            assert(GetRValue(c20) > 180 && GetGValue(c20) < 130 && GetBValue(c20) < 130); // Red dominant
+            assert(GetRValue(c00) > 180 && GetGValue(c00) < 130 && GetBValue(c00) < 130); // Red dominant
+        }
+        std::cout << "Threshold color boundary tests (<=20% red, <=60% yellow, >60% green) passed!" << std::endl;
+    }
+
     SelectObject(hdcMem, hOldFont);
     DeleteObject(hFont);
     SelectObject(hdcMem, hOldBmp);

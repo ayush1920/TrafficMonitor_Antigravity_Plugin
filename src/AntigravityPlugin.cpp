@@ -149,11 +149,11 @@ static std::wstring FormatResetTime(const std::string& raw, bool shortForm)
 
 static COLORREF GetThresholdColor(int pct, bool darkMode)
 {
-    if (pct > 50)
-        return darkMode ? RGB(74, 222, 128) : RGB(22, 163, 74);   // Green (> 50%)
-    if (pct >= 20)
-        return darkMode ? RGB(251, 191, 36) : RGB(217, 119, 6);   // Amber (20-50%)
-    return darkMode ? RGB(248, 113, 113) : RGB(220, 38, 38);      // Red (< 20%)
+    if (pct > 60)
+        return darkMode ? RGB(74, 222, 128) : RGB(22, 163, 74);   // Green (> 60%)
+    if (pct > 20)
+        return darkMode ? RGB(251, 191, 36) : RGB(217, 119, 6);   // Yellow (21-60%, <= 60% inclusive)
+    return darkMode ? RGB(248, 113, 113) : RGB(220, 38, 38);      // Red (<= 20% inclusive)
 }
 
 static COLORREF ComputeSecondaryColor(COLORREF baseColor, bool darkMode, bool insidePill, bool dimEnabled)
