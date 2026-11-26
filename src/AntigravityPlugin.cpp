@@ -1096,7 +1096,7 @@ void CPluginItem::DrawItem(void* hDC, int x, int y, int w, int h, bool dark_mode
 }
 
 CAntigravityPlugin::CAntigravityPlugin()
-    : m_itemCombined(L"antigravity_quota", L"Antigravity Quota", L"G:100% A:100%", L"G:100% (4h59m) A:100% (6d23h)", true),
+    : m_itemCombined(L"antigravity_quota", L"Antigravity Quota", L"AG:", L"G:100% (4h 59m) A:100% (6d 23h)", true),
       m_itemGemini(L"antigravity_gemini", L"Antigravity Gemini", L"G:", L"G:100% (4h59m)", true),
       m_itemClaude(L"antigravity_claude", L"Antigravity Claude", L"C:", L"C:100% (4h59m)", true),
       m_itemAccount(L"antigravity_account", L"Antigravity Account", L"Acc:", L"AccountName", false),
@@ -1278,6 +1278,8 @@ void CAntigravityPlugin::LoadSettings()
     m_settings.alignColumns = (GetPrivateProfileIntW(L"Display", L"AlignColumns", 1, cfg.c_str()) != 0);
     m_settings.tabularDigits = (GetPrivateProfileIntW(L"Display", L"TabularDigits", 1, cfg.c_str()) != 0);
     m_settings.dimSecondaryInfo = (GetPrivateProfileIntW(L"Display", L"DimSecondaryInfo", 1, cfg.c_str()) != 0);
+    int pollSec = GetPrivateProfileIntW(L"Display", L"PollIntervalSec", 300, cfg.c_str());
+    m_settings.pollIntervalSec = (pollSec < 15) ? 15 : pollSec;
 }
 
 void CAntigravityPlugin::SaveSettings()
@@ -1298,6 +1300,7 @@ void CAntigravityPlugin::SaveSettings()
     WritePrivateProfileStringW(L"Display", L"AlignColumns", m_settings.alignColumns ? L"1" : L"0", cfg.c_str());
     WritePrivateProfileStringW(L"Display", L"TabularDigits", m_settings.tabularDigits ? L"1" : L"0", cfg.c_str());
     WritePrivateProfileStringW(L"Display", L"DimSecondaryInfo", m_settings.dimSecondaryInfo ? L"1" : L"0", cfg.c_str());
+    WritePrivateProfileStringW(L"Display", L"PollIntervalSec", std::to_wstring(m_settings.pollIntervalSec).c_str(), cfg.c_str());
 }
 
 void CAntigravityPlugin::RefreshHostWindows()
@@ -1320,7 +1323,9 @@ void CAntigravityPlugin::RefreshHostWindows()
 void CAntigravityPlugin::ApplySettings(const PluginSettings& settings)
 {
     m_settings = settings;
+    if (m_settings.pollIntervalSec < 15) m_settings.pollIntervalSec = 15;
     SaveSettings();
+    if (m_wakeEvent) SetEvent(m_wakeEvent);
     {
         std::lock_guard<std::mutex> lock(m_dataMutex);
         if (!m_lastJsonStr.empty())
@@ -1490,6 +1495,8 @@ enum OptionsCtrlId
     IDC_RADIO_LONG = 402,
     IDC_RADIO_SHORT = 403,
     IDC_LBL_PERCENT_NOTE = 404,
+    IDC_LBL_POLL_INTERVAL = 405,
+    IDC_EDIT_POLL_INTERVAL = 406,
 
     IDC_BTN_APPLY = 501
 };
@@ -1504,7 +1511,8 @@ static bool SettingsEqual(const PluginSettings& a, const PluginSettings& b)
            a.displayStyle == b.displayStyle &&
            a.alignColumns == b.alignColumns &&
            a.tabularDigits == b.tabularDigits &&
-           a.dimSecondaryInfo == b.dimSecondaryInfo;
+           a.dimSecondaryInfo == b.dimSecondaryInfo &&
+           a.pollIntervalSec == b.pollIntervalSec;
 }
 
 struct OptionsDlgContext
@@ -1533,6 +1541,10 @@ static void ReadControlsToSettings(HWND hWnd, PluginSettings& out)
 
     out.hideResetTime = (IsDlgButtonChecked(hWnd, IDC_CHK_HIDE_RESET) == BST_CHECKED);
     out.shortResetTime = (IsDlgButtonChecked(hWnd, IDC_RADIO_SHORT) == BST_CHECKED);
+
+    BOOL ok = FALSE;
+    UINT pollVal = GetDlgItemInt(hWnd, IDC_EDIT_POLL_INTERVAL, &ok, FALSE);
+    out.pollIntervalSec = (ok && pollVal >= 15) ? static_cast<int>(pollVal) : 15;
 }
 
 static void UpdateDependentControlStates(HWND hWnd)
@@ -1631,8 +1643,8 @@ static LRESULT CALLBACK OptionsDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
                                         BS_AUTOCHECKBOX | WS_TABSTOP, 30, 312, 436, 22);
         SendMessageW(hHideLabels, BM_SETCHECK, s.hideLabels ? BST_CHECKED : BST_UNCHECKED, 0);
 
-        // Group 3: Reset Time Display
-        AddDlgButton(hWnd, hi, ctx->hFont, IDC_GRP_RESET, L"Reset Time Display", BS_GROUPBOX, 16, 348, 464, 96);
+        // Group 3: Reset Time Display & Refresh Interval
+        AddDlgButton(hWnd, hi, ctx->hFont, IDC_GRP_RESET, L"Reset Time Display && Refresh", BS_GROUPBOX, 16, 348, 464, 124);
 
         HWND hHideReset = AddDlgButton(hWnd, hi, ctx->hFont, IDC_CHK_HIDE_RESET,
                                        L"Hide reset time on taskbar (always shown in tooltip)",
@@ -1647,16 +1659,28 @@ static LRESULT CALLBACK OptionsDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
                      BS_AUTORADIOBUTTON, 248, 394, 210, 22);
         CheckRadioButton(hWnd, IDC_RADIO_LONG, IDC_RADIO_SHORT, s.shortResetTime ? IDC_RADIO_SHORT : IDC_RADIO_LONG);
 
+        HWND hPollLbl = CreateWindowExW(0, L"STATIC",
+                                        L"Refresh interval (sec, min 15):",
+                                        WS_CHILD | WS_VISIBLE | WS_GROUP, 30, 424, 185, 20,
+                                        hWnd, (HMENU)IDC_LBL_POLL_INTERVAL, hi, nullptr);
+        SendMessageW(hPollLbl, WM_SETFONT, (WPARAM)ctx->hFont, TRUE);
+
+        std::wstring pollText = std::to_wstring(s.pollIntervalSec < 15 ? 15 : s.pollIntervalSec);
+        HWND hPollEdit = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", pollText.c_str(),
+                                         WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_NUMBER | ES_AUTOHSCROLL,
+                                         220, 421, 70, 22, hWnd, (HMENU)IDC_EDIT_POLL_INTERVAL, hi, nullptr);
+        SendMessageW(hPollEdit, WM_SETFONT, (WPARAM)ctx->hFont, TRUE);
+
         HWND hPctNote = CreateWindowExW(0, L"STATIC",
                                         L"Note: '%' sign and labels also respect TrafficMonitor Display Text settings.",
-                                        WS_CHILD | WS_VISIBLE | WS_GROUP, 30, 420, 440, 18,
+                                        WS_CHILD | WS_VISIBLE | WS_GROUP, 30, 448, 440, 18,
                                         hWnd, (HMENU)IDC_LBL_PERCENT_NOTE, hi, nullptr);
         SendMessageW(hPctNote, WM_SETFONT, (WPARAM)ctx->hFont, TRUE);
 
         // Action Buttons: OK / Cancel / Apply
-        AddDlgButton(hWnd, hi, ctx->hFont, IDOK, L"OK", BS_DEFPUSHBUTTON | WS_TABSTOP, 220, 458, 80, 28);
-        AddDlgButton(hWnd, hi, ctx->hFont, IDCANCEL, L"Cancel", BS_PUSHBUTTON | WS_TABSTOP, 310, 458, 80, 28);
-        HWND hApply = AddDlgButton(hWnd, hi, ctx->hFont, IDC_BTN_APPLY, L"Apply", BS_PUSHBUTTON | WS_TABSTOP, 400, 458, 80, 28);
+        AddDlgButton(hWnd, hi, ctx->hFont, IDOK, L"OK", BS_DEFPUSHBUTTON | WS_TABSTOP, 220, 488, 80, 28);
+        AddDlgButton(hWnd, hi, ctx->hFont, IDCANCEL, L"Cancel", BS_PUSHBUTTON | WS_TABSTOP, 310, 488, 80, 28);
+        HWND hApply = AddDlgButton(hWnd, hi, ctx->hFont, IDC_BTN_APPLY, L"Apply", BS_PUSHBUTTON | WS_TABSTOP, 400, 488, 80, 28);
         EnableWindow(hApply, FALSE);
 
         UpdateDependentControlStates(hWnd);
@@ -1700,11 +1724,12 @@ static LRESULT CALLBACK OptionsDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
             DestroyWindow(hWnd);
             return 0;
         }
-        else if (notif == BN_CLICKED &&
-                 (id == IDC_CHK_SMART || id == IDC_CHK_HIDE_WEEKLY ||
-                  (id >= IDC_STYLE_CLASSIC && id <= IDC_STYLE_PILL_BADGES) ||
-                  (id >= IDC_CHK_ALIGN_COLS && id <= IDC_CHK_HIDE_LABELS) ||
-                  (id >= IDC_CHK_HIDE_RESET && id <= IDC_RADIO_SHORT)))
+        else if ((notif == BN_CLICKED &&
+                  (id == IDC_CHK_SMART || id == IDC_CHK_HIDE_WEEKLY ||
+                   (id >= IDC_STYLE_CLASSIC && id <= IDC_STYLE_PILL_BADGES) ||
+                   (id >= IDC_CHK_ALIGN_COLS && id <= IDC_CHK_HIDE_LABELS) ||
+                   (id >= IDC_CHK_HIDE_RESET && id <= IDC_RADIO_SHORT))) ||
+                 (id == IDC_EDIT_POLL_INTERVAL && notif == EN_CHANGE))
         {
             UpdateDependentControlStates(hWnd);
             if (ctx && ctx->pPlugin)
@@ -1770,22 +1795,27 @@ ITMPlugin::OptionReturn CAntigravityPlugin::ShowOptionsDialog(void* hParent)
 
     DWORD dwStyle = WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE;
     DWORD dwExStyle = WS_EX_DLGMODALFRAME | WS_EX_TOPMOST;
-    RECT rc = { 0, 0, 496, 500 };
+    RECT rc = { 0, 0, 496, 530 };
     AdjustWindowRectEx(&rc, dwStyle, FALSE, dwExStyle);
     int width = rc.right - rc.left;
     int height = rc.bottom - rc.top;
 
-    int x = (GetSystemMetrics(SM_CXSCREEN) - width) / 2;
-    int y = (GetSystemMetrics(SM_CYSCREEN) - height) / 2;
-    if (hWndParent && IsWindow(hWndParent))
+    RECT workArea = { 0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN) };
+    HMONITOR hMon = MonitorFromWindow((hWndParent && IsWindow(hWndParent)) ? hWndParent : GetForegroundWindow(),
+                                      MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi{};
+    mi.cbSize = sizeof(mi);
+    if (hMon && GetMonitorInfoW(hMon, &mi))
     {
-        RECT prc;
-        if (GetWindowRect(hWndParent, &prc))
-        {
-            x = prc.left + ((prc.right - prc.left) - width) / 2;
-            y = prc.top + ((prc.bottom - prc.top) - height) / 2;
-        }
+        workArea = mi.rcWork;
     }
+
+    int x = workArea.left + ((workArea.right - workArea.left) - width) / 2;
+    int y = workArea.top + ((workArea.bottom - workArea.top) - height) / 2;
+    if (x < workArea.left) x = workArea.left;
+    if (y < workArea.top) y = workArea.top;
+    if (x + width > workArea.right) x = workArea.right - width;
+    if (y + height > workArea.bottom) y = workArea.bottom - height;
 
     HWND hWndDlg = CreateWindowExW(
         dwExStyle,
@@ -2345,8 +2375,6 @@ DWORD WINAPI CAntigravityPlugin::WorkerThreadProc(LPVOID lpParam)
 
 void CAntigravityPlugin::BackgroundWorkerLoop()
 {
-    const DWORD kPollIntervalMs = 5 * 60 * 1000; // 5 minutes
-
     // Initial poll right after initialization
     m_pollNowRequested.store(true, std::memory_order_release);
 
@@ -2386,7 +2414,11 @@ void CAntigravityPlugin::BackgroundWorkerLoop()
 
         if (m_stopWorker.load(std::memory_order_acquire)) break;
 
-        DWORD waitRes = WaitForSingleObject(m_wakeEvent, kPollIntervalMs);
+        int pollSec = m_settings.pollIntervalSec;
+        if (pollSec < 15) pollSec = 15;
+        DWORD waitMs = static_cast<DWORD>(pollSec) * 1000u;
+
+        DWORD waitRes = WaitForSingleObject(m_wakeEvent, waitMs);
         if (m_stopWorker.load(std::memory_order_acquire)) break;
         if (waitRes == WAIT_TIMEOUT)
         {

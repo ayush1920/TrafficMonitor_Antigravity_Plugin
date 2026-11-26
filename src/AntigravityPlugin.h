@@ -46,6 +46,7 @@ struct PluginSettings
     bool alignColumns = true;                    // true = Right-align numbers & reset times into columns
     bool tabularDigits = true;                   // true = Monospace/fixed-width digit cells to prevent jitter
     bool dimSecondaryInfo = true;                // true = Dim secondary info (timers/labels) for visual hierarchy
+    int pollIntervalSec = 300;                   // Background poll interval in seconds (min 15)
 };
 
 class CPluginItem : public IPluginItem
